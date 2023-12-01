@@ -26,7 +26,7 @@ ndef-app = { path = "../ndef-app", optional = true }
 webcrypt = { version = "0.8.0", optional = true }
 secrets-app = { version = "0.13.0", features = ["apdu-dispatch", "ctaphid"], optional = true }
 opcard = { version = "1.1.1", features = ["apdu-dispatch", "delog", "rsa2048-gen", "rsa4096", "admin-app"], optional = true }
-piv-authenticator = { version = "0.3.1", features = ["apdu-dispatch", "delog"], optional = true }
+piv-authenticator = { version = "0.3.1", features = ["apdu-dispatch", "ctaphid", "delog", "rsa"], optional = true }
 provisioner-app = { path = "../provisioner-app", optional = true }
 se05x = { version = "0.0.1", optional = true}
 trussed-se050-backend = { version = "0.1.0", optional = true }
@@ -47,7 +47,7 @@ backend-staging-hmacsha256p256 = ["trussed-staging/hmacsha256p256"]
 webcrypt = ["dep:webcrypt", "backend-auth", "backend-rsa", "backend-staging-hmacsha256p256"]
 fido-authenticator = ["dep:fido-authenticator", "usbd-ctaphid"]
 opcard = ["dep:opcard", "backend-rsa", "backend-auth"]
-piv-authenticator = ["dep:piv-authenticator", "backend-rsa", "backend-auth"]
+piv-authenticator = ["dep:piv-authenticator", "backend-rsa", "trussed-rsa-alloc/raw", "backend-auth"]
 se050-test-app = ["se050", "admin-app/se050"]
 se050 = ["trussed-se050-backend", "dep:se05x"]
 
@@ -55,7 +55,7 @@ se050 = ["trussed-se050-backend", "dep:se05x"]
 backend-auth = ["trussed-auth"]
 backend-rsa = ["trussed-rsa-alloc"]
 
-log-all = ["admin-app/log-all", "fido-authenticator?/log-all", "secrets-app?/log-all", "webcrypt?/log-all", "opcard?/log-all", "provisioner-app?/log-all"]
+log-all = ["admin-app/log-all", "fido-authenticator?/log-all", "secrets-app?/log-all", "webcrypt?/log-all", "opcard?/log-all", "provisioner-app?/log-all", "piv-authenticator?/log-all"]
 
 trussed-usbip-ccid = ["trussed-usbip/ccid"]
 

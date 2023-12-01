@@ -278,6 +278,8 @@ impl<R: Runner> Apps<R> {
             &mut self.oath,
             #[cfg(feature = "provisioner-app")]
             &mut self.provisioner,
+            #[cfg(feature = "piv-authenticator")]
+            &mut self.piv,
         ])
     }
 }

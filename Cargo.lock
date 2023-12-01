@@ -2294,9 +2294,9 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 [[package]]
 name = "piv-authenticator"
 version = "0.3.3"
-source = "git+https://github.com/Nitrokey/piv-authenticator?tag=v0.3.3#caed9e43ac04484d3808140f7f6393a1e09d6678"
 dependencies = [
  "apdu-dispatch",
+ "ctaphid-dispatch",
  "delog",
  "flexiber",
  "heapless 0.7.16",
@@ -2308,6 +2308,7 @@ dependencies = [
  "subtle",
  "trussed",
  "trussed-auth",
+ "trussed-rsa-alloc",
  "trussed-staging",
  "untrusted",
 ]
