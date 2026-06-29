@@ -86,7 +86,7 @@ pub enum Response {
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug)]
-pub enum WaitForInterruptState {
+pub enum WaitForInterrupt {
     No = 0,
     #[doc(alias = "SDMMC_CMD_WAITINT")]
     It = 0x00000400,
@@ -96,19 +96,19 @@ pub enum WaitForInterruptState {
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug)]
-pub enum CpsmState {
+pub enum Cpsm {
     Disable = 0,
     #[doc(alias = "SDMMC_CMD_CPSMEN")]
     Enable = 0x00001000,
 }
 
-pub struct SdMmcCmdInit {
+pub struct Command {
     pub argument: u32,
     /// Must be within 0..=64
-    pub cmd_index: Command,
+    pub cmd_index: CmdIndex,
     pub response: Response,
-    pub wait_for_interrupt: WaitForInterruptState,
-    pub cpsm: CpsmState,
+    pub wait_for_interrupt: WaitForInterrupt,
+    pub cpsm: Cpsm,
 }
 
 const SDMMC_DCTRL_DBLOCKSIZE_0: u32 = 0x00000010;
@@ -246,7 +246,7 @@ bitflags! {
 
 #[repr(u32)]
 #[derive(Clone, Copy, Debug)]
-pub enum Command {
+pub enum CmdIndex {
     ///  Resets the SD memory card.                                                               
     GoIdleState = 0,
     ///  Sends host capacity support information and activates the card's initialization process.
@@ -285,7 +285,7 @@ pub enum Command {
     ///  Reads single block of size selected by SET_BLOCKLEN in case of SDSC, and a block of fixed 512 bytes in case of SDHC and SDXC.                                    
     ReadSingleBlock = 17,
     ///  Continuously transfers data blocks from card to host until interrupted by  STOP_TRANSMISSION command.                                                            
-    ReadMultBlock = 18,
+    ReadMultiBlock = 18,
     ///  64 bytes tuning pattern is sent for SDR50 and SDR104.                                    
     HsBustestWrite = 19,
     ///  Speed class control command.                                                             
@@ -442,6 +442,46 @@ enum_u!(
 
 const CMD_TIMEOUT: u32 = 5000;
 
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct ResponseBits: u32 {
+        const OCR_ADDR_OUT_OF_RANGE     = 0x80000000;
+        const OCR_ADDR_MISALIGNED       = 0x40000000;
+        const OCR_BLOCK_LEN_ERR         = 0x20000000;
+        const OCR_ERASE_SEQ_ERR         = 0x10000000;
+        const OCR_BAD_ERASE_PARAM       = 0x08000000;
+        const OCR_WRITE_PROT_VIOLATION  = 0x04000000;
+        const OCR_LOCK_UNLOCK_FAILED    = 0x01000000;
+        const OCR_COM_CRC_FAILED        = 0x00800000;
+        const OCR_ILLEGAL_CMD           = 0x00400000;
+        const OCR_CARD_ECC_FAILED       = 0x00200000;
+        const OCR_CC_ERROR              = 0x00100000;
+        const OCR_GENERAL_UNKNOWN_ERROR = 0x00080000;
+        const OCR_STREAM_READ_UNDERRUN  = 0x00040000;
+        const OCR_STREAM_WRITE_OVERRUN  = 0x00020000;
+        const OCR_CID_CSD_OVERWRITE     = 0x00010000;
+        const OCR_WP_ERASE_SKIP         = 0x00008000;
+        const OCR_CARD_ECC_DISABLED     = 0x00004000;
+        const OCR_ERASE_RESET           = 0x00002000;
+        const OCR_AKE_SEQ_ERROR         = 0x00000008;
+        const OCR_ERRORBITS             = 0xFDFFE008;
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ReadWaitMode {
+    /// Read Wait control using SDMMC_DATA2
+    Data2,
+    /// Read Wait control by stopping SDMMCCLK
+    Clk,
+}
+
+impl ReadWaitMode {
+    fn bit(self) -> bool {
+        matches!(self, Self::Clk)
+    }
+}
+
 impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     pub fn read_fifo(&mut self) -> u32 {
         // The C hal only reads/writes the 0x80 register for FIFO
@@ -480,7 +520,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             .expect("All power values to be supported by the enum")
     }
 
-    pub fn send_command(&mut self, command: SdMmcCmdInit) {
+    pub fn send_command(&mut self, command: Command) {
         let tmpreg = command.cmd_index as u32
             | command.response as u32
             | command.wait_for_interrupt as u32
@@ -493,12 +533,12 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         self.peripheral.respcmdr().read().respcmd().bits()
     }
 
-    pub fn get_response(&mut self, resp: Resp) -> u32 {
+    pub fn get_response(&mut self, resp: Resp) -> ResponseBits {
         match resp {
-            Resp::Resp1 => self.peripheral.resp1r().read().bits(),
-            Resp::Resp2 => self.peripheral.resp2r().read().bits(),
-            Resp::Resp3 => self.peripheral.resp3r().read().bits(),
-            Resp::Resp4 => self.peripheral.resp4r().read().bits(),
+            Resp::Resp1 => ResponseBits::from_bits_retain(self.peripheral.resp1r().read().bits()),
+            Resp::Resp2 => ResponseBits::from_bits_retain(self.peripheral.resp2r().read().bits()),
+            Resp::Resp3 => ResponseBits::from_bits_retain(self.peripheral.resp3r().read().bits()),
+            Resp::Resp4 => ResponseBits::from_bits_retain(self.peripheral.resp4r().read().bits()),
         }
     }
 
@@ -518,11 +558,15 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             .write(|w| w.rwmod().bit(read_wait_mode.bit()));
     }
 
+    pub fn get_cmd_resp(&mut self) -> u8 {
+        self.peripheral.respcmdr().read().bits() as u8
+    }
+
     /// Checks for error conditions for R1 response.
-    pub fn get_cmd_resp1(&mut self, cmd: Command, timeout: u32) -> Error {
+    pub fn get_cmd_resp1(&mut self, cmd: CmdIndex, timeout: u32) -> Error {
         // TODO: get real freq
         let system_freq = 64_000_000;
-        let mut count = system_freq / 8 / 1000;
+        let mut count = timeout * system_freq / 8 / 1000;
         loop {
             count -= 1;
             if count == 0 {
@@ -539,32 +583,133 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
                 break;
             }
         }
-        todo!()
+
+        if self.peripheral.star().read().ctimeout().bit() {
+            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            return Error::CMD_RSP_TIMEOUT;
+        }
+
+        if self.peripheral.star().read().ccrcfail().bit() {
+            self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
+            return Error::CMD_CRC_FAIL;
+        }
+
+        self.peripheral.icr().write(|w| {
+            w.ccrcfailc()
+                .bit(true)
+                .ctimeoutc()
+                .bit(true)
+                .cmdrendc()
+                .bit(true)
+        });
+
+        if self.get_cmd_resp() != cmd as _ {
+            return Error::CMD_CRC_FAIL;
+        }
+
+        let resp1 = self.get_response(Resp::Resp1);
+
+        if resp1 & ResponseBits::OCR_ERRORBITS == ResponseBits::empty() {
+            return Error::NONE;
+        }
+
+        if resp1.contains(ResponseBits::OCR_ADDR_OUT_OF_RANGE) {
+            return Error::ADDR_OUTOF_RANGE;
+        } else if resp1.contains(ResponseBits::OCR_ADDR_MISALIGNED) {
+            return Error::ADDR_MISALIGNED;
+        } else if resp1.contains(ResponseBits::OCR_BLOCK_LEN_ERR) {
+            return Error::BLOCK_LEN_ERR;
+        } else if resp1.contains(ResponseBits::OCR_ERASE_SEQ_ERR) {
+            return Error::ERASE_SEQ_ERR;
+        } else if resp1.contains(ResponseBits::OCR_BAD_ERASE_PARAM) {
+            return Error::BAD_ERASE_PARAM;
+        } else if resp1.contains(ResponseBits::OCR_WRITE_PROT_VIOLATION) {
+            return Error::WRITE_PROT_VIOLATION;
+        } else if resp1.contains(ResponseBits::OCR_LOCK_UNLOCK_FAILED) {
+            return Error::LOCK_UNLOCK_FAILED;
+        } else if resp1.contains(ResponseBits::OCR_COM_CRC_FAILED) {
+            return Error::COM_CRC_FAILED;
+        } else if resp1.contains(ResponseBits::OCR_ILLEGAL_CMD) {
+            return Error::ILLEGAL_CMD;
+        } else if resp1.contains(ResponseBits::OCR_CARD_ECC_FAILED) {
+            return Error::CARD_ECC_FAILED;
+        } else if resp1.contains(ResponseBits::OCR_CC_ERROR) {
+            return Error::CC_ERR;
+        } else if resp1.contains(ResponseBits::OCR_STREAM_READ_UNDERRUN) {
+            return Error::STREAM_READ_UNDERRUN;
+        } else if resp1.contains(ResponseBits::OCR_STREAM_WRITE_OVERRUN) {
+            return Error::STREAM_WRITE_OVERRUN;
+        } else if resp1.contains(ResponseBits::OCR_CID_CSD_OVERWRITE) {
+            return Error::CID_CSD_OVERWRITE;
+        } else if resp1.contains(ResponseBits::OCR_WP_ERASE_SKIP) {
+            return Error::WP_ERASE_SKIP;
+        } else if resp1.contains(ResponseBits::OCR_CARD_ECC_DISABLED) {
+            return Error::CARD_ECC_DISABLED;
+        } else if resp1.contains(ResponseBits::OCR_ERASE_RESET) {
+            return Error::ERASE_RESET;
+        } else if resp1.contains(ResponseBits::OCR_AKE_SEQ_ERROR) {
+            return Error::AKE_SEQ_ERR;
+        }
+        Error::GENERAL_UNKNOWN_ERR
+    }
+
+    pub fn cmd_short_nowfi_cpsm(&mut self, command: CmdIndex, arg: u32) -> Error {
+        self.send_command(Command {
+            argument: arg,
+            cmd_index: command,
+            response: Response::Short,
+            wait_for_interrupt: WaitForInterrupt::No,
+            cpsm: Cpsm::Enable,
+        });
+
+        self.get_cmd_resp1(command, CMD_TIMEOUT)
     }
 
     pub fn cmd_block_len(&mut self, block_size: u32) -> Error {
-        self.send_command(SdMmcCmdInit {
-            argument: block_size,
-            cmd_index: Command::SetBlockLen,
-            response: Response::Short,
-            wait_for_interrupt: WaitForInterruptState::No,
-            cpsm: CpsmState::Enable,
-        });
-
-        self.get_cmd_resp1(Command::SetBlockLen, CMD_TIMEOUT)
+        self.cmd_short_nowfi_cpsm(CmdIndex::SetBlockLen, block_size)
     }
-}
 
-#[derive(Clone, Copy, Debug)]
-pub enum ReadWaitMode {
-    /// Read Wait control using SDMMC_DATA2
-    Data2,
-    /// Read Wait control by stopping SDMMCCLK
-    Clk,
-}
+    pub fn cmd_block_count(&mut self, block_count: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::SetBlockCount, block_count)
+    }
 
-impl ReadWaitMode {
-    fn bit(self) -> bool {
-        matches!(self, Self::Clk)
+    pub fn cmd_read_single_block(&mut self, read_addr: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::ReadSingleBlock, read_addr)
+    }
+
+    pub fn cmd_read_multi_block(&mut self, read_addr: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::ReadMultiBlock, read_addr)
+    }
+
+    pub fn cmd_write_single_block(&mut self, write_addr: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::WriteSingleBlock, write_addr)
+    }
+
+    pub fn cmd_write_multi_block(&mut self, write_addr: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::WriteMultBlock, write_addr)
+    }
+
+    pub fn cmd_sd_erase_start_add(&mut self, start_addr: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::SdEraseGrpStart, start_addr)
+    }
+
+    pub fn cmd_sd_erase_end_add(&mut self, end_addr: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::SdEraseGrpEnd, end_addr)
+    }
+
+    pub fn cmd_erase_start_add(&mut self, start_addr: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::EraseGrpStart, start_addr)
+    }
+
+    pub fn cmd_erase_end_add(&mut self, end_addr: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::EraseGrpEnd, end_addr)
+    }
+
+    pub fn cmd_erase(&mut self, erase_type: u32) -> Error {
+        self.cmd_short_nowfi_cpsm(CmdIndex::Erase, erase_type)
+    }
+
+    pub fn cmd_stop_transfer(&mut self) -> Error {
+        todo!("SDMMC_CmdStopTransfer")
     }
 }
