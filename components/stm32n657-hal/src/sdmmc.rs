@@ -716,6 +716,40 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         Error::GENERAL_UNKNOWN_ERR
     }
 
+    pub fn get_cmd_resp2(&mut self) -> Error {
+        // TODO: get real freq
+        let system_freq = 64_000_000;
+        let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
+
+        let mut star;
+        loop {
+            star = self.peripheral.star().read();
+            if !(star.ccrcfail().bit()
+                | star.cmdrend().bit()
+                | star.ctimeout().bit()
+                | !star.cpsmact().bit())
+            {
+                break;
+            }
+            count -= 1;
+            if count == 0 {
+                return Error::TIMEOUT;
+            }
+        }
+        if star.ctimeout().bit() {
+            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            return Error::CMD_RSP_TIMEOUT;
+        }
+
+        if star.ccrcfail().bit() {
+            self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
+            return Error::CMD_CRC_FAIL;
+        }
+
+        self.clear_static_flags();
+        Error::empty()
+    }
+
     pub fn get_cmd_resp3(&mut self) -> Error {
         // TODO: get real freq
         let system_freq = 64_000_000;
@@ -1095,7 +1129,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             cpsm: Cpsm::Enable,
         });
 
-        self.get_cmd_resp1(command, CMD_TIMEOUT)
+        self.get_cmd_resp2()
     }
 
     pub fn cmd_send_csd(&mut self) -> Error {
@@ -1108,7 +1142,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             cpsm: Cpsm::Enable,
         });
 
-        self.get_cmd_resp1(command, CMD_TIMEOUT)
+        self.get_cmd_resp2()
     }
 
     pub fn cmd_set_rel_add(&mut self, rca: &mut u16) -> Error {
