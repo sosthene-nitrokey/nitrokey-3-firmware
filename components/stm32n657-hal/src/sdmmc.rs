@@ -356,7 +356,7 @@ pub enum CmdIndex {
 }
 
 /// SD Card Specific security commands.
-/// [`Command::AppCommand`][] should be sent before sending these commands.
+/// [`CmdIndex::AppCmd`][] should be sent before sending these commands.
 #[repr(u32)]
 #[derive(Clone, Copy, Debug)]
 pub enum SdCardCommand {
@@ -1094,7 +1094,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     /// SD Card Specific security command.
-    /// [`Command::AppCommand`][] should be sent before sending this command.
+    /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
     pub fn cmd_app_oper_command(&mut self, argument: u32) -> Error {
         self.send_command(Command {
             argument,
@@ -1108,13 +1108,13 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     /// SD Card Specific security command.
-    /// [`Command::AppCommand`][] should be sent before sending this command.
+    /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
     pub fn cmd_bus_wdith(&mut self, bus_width: u32) -> Error {
         self.cmd_short1_nowfi_cpsm(SdCardCommand::AppSdSetBuswidth, bus_width)
     }
 
     /// SD Card Specific security command.
-    /// [`Command::AppCommand`][] should be sent before sending this command.
+    /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
     pub fn cmd_send_scr(&mut self) -> Error {
         self.cmd_short1_nowfi_cpsm(SdCardCommand::SdAppSendScr, 0)
     }
@@ -1172,7 +1172,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     /// SD Card Specific security command.
-    /// [`Command::AppCommand`][] should be sent before sending this command.
+    /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
     pub fn cmd_status_register(&mut self) -> Error {
         self.cmd_short1_nowfi_cpsm(SdCardCommand::SdAppStatus, 0)
     }
@@ -1205,7 +1205,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     /// SD Card Specific security command.
-    /// [`Command::AppCommand`][] should be sent before sending this command.
+    /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
     pub fn sdio_cmd_read_write_direct(&mut self, argument: u32, response: &mut u8) -> Error {
         self.send_command(Command {
             argument,
@@ -1219,7 +1219,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     /// SD Card Specific security command.
-    /// [`Command::AppCommand`][] should be sent before sending this command.
+    /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
     pub fn sdio_cmd_read_write_extended(&mut self, argument: u32) -> Error {
         self.send_command(Command {
             argument,
@@ -1233,7 +1233,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     /// SD Card Specific security command.
-    /// [`Command::AppCommand`][] should be sent before sending this command.
+    /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
     pub fn cmd_send_operation_condition(&mut self, argument: u32, response: &mut u32) -> Error {
         self.send_command(Command {
             argument,
