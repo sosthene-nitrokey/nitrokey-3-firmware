@@ -14,7 +14,7 @@ impl SdMmc for SDMMC2 {}
 #[repr(u32)]
 #[derive(Clone, Copy, Debug)]
 pub enum ClockEdge {
-    Raising = 0x0,
+    Rising = 0x0,
     #[doc(alias = "SDMMC_CLKCR_NEGEDGE")]
     Falling = 0x00010000,
 }
@@ -200,8 +200,6 @@ pub struct DataInit {
 bitflags! {
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub struct Error: u32 {
-        ///  No error
-        const NONE = 0x00000000;
         ///  Command response received (but CRC check failed)
         const CMD_CRC_FAIL = 0x00000001;
         ///  Data block sent/received (CRC check failed)
@@ -424,7 +422,7 @@ pub struct Disabled;
 pub struct Enabled;
 
 pub struct SdMmcMaster<P, S> {
-    peripheral: P,
+    pub(crate) peripheral: P,
     _state: PhantomData<S>,
 }
 
@@ -633,7 +631,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     /// Checks for error conditions for R1 response.
-    pub fn get_cmd_resp1<C: CommandIndex>(&mut self, cmd: C, timeout: u32) -> Error {
+    pub fn get_cmd_resp1<C: CommandIndex>(&mut self, cmd: C, timeout: u32) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
         let mut count = timeout * system_freq / 8 / 1000;
@@ -641,7 +639,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         loop {
             count -= 1;
             if count == 0 {
-                return Error::TIMEOUT;
+                return Err(Error::TIMEOUT);
             }
 
             star = self.peripheral.star().read();
@@ -657,66 +655,66 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
         if star.ctimeout().bit() {
             self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
-            return Error::CMD_RSP_TIMEOUT;
+            return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         if star.ccrcfail().bit() {
             self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
-            return Error::CMD_CRC_FAIL;
+            return Err(Error::CMD_CRC_FAIL);
         }
 
         self.clear_static_flags();
         if self.get_cmd_resp() != cmd.into() as _ {
-            return Error::CMD_CRC_FAIL;
+            return Err(Error::CMD_CRC_FAIL);
         }
 
         let resp1 = self.get_response(Resp::Resp1);
 
         if resp1 & ResponseBits::OCR_ERRORBITS == ResponseBits::empty() {
-            return Error::NONE;
+            return Ok(());
         }
 
         if resp1.contains(ResponseBits::OCR_ADDR_OUT_OF_RANGE) {
-            return Error::ADDR_OUTOF_RANGE;
+            return Err(Error::ADDR_OUTOF_RANGE);
         } else if resp1.contains(ResponseBits::OCR_ADDR_MISALIGNED) {
-            return Error::ADDR_MISALIGNED;
+            return Err(Error::ADDR_MISALIGNED);
         } else if resp1.contains(ResponseBits::OCR_BLOCK_LEN_ERR) {
-            return Error::BLOCK_LEN_ERR;
+            return Err(Error::BLOCK_LEN_ERR);
         } else if resp1.contains(ResponseBits::OCR_ERASE_SEQ_ERR) {
-            return Error::ERASE_SEQ_ERR;
+            return Err(Error::ERASE_SEQ_ERR);
         } else if resp1.contains(ResponseBits::OCR_BAD_ERASE_PARAM) {
-            return Error::BAD_ERASE_PARAM;
+            return Err(Error::BAD_ERASE_PARAM);
         } else if resp1.contains(ResponseBits::OCR_WRITE_PROT_VIOLATION) {
-            return Error::WRITE_PROT_VIOLATION;
+            return Err(Error::WRITE_PROT_VIOLATION);
         } else if resp1.contains(ResponseBits::OCR_LOCK_UNLOCK_FAILED) {
-            return Error::LOCK_UNLOCK_FAILED;
+            return Err(Error::LOCK_UNLOCK_FAILED);
         } else if resp1.contains(ResponseBits::OCR_COM_CRC_FAILED) {
-            return Error::COM_CRC_FAILED;
+            return Err(Error::COM_CRC_FAILED);
         } else if resp1.contains(ResponseBits::OCR_ILLEGAL_CMD) {
-            return Error::ILLEGAL_CMD;
+            return Err(Error::ILLEGAL_CMD);
         } else if resp1.contains(ResponseBits::OCR_CARD_ECC_FAILED) {
-            return Error::CARD_ECC_FAILED;
+            return Err(Error::CARD_ECC_FAILED);
         } else if resp1.contains(ResponseBits::OCR_CC_ERROR) {
-            return Error::CC_ERR;
+            return Err(Error::CC_ERR);
         } else if resp1.contains(ResponseBits::OCR_STREAM_READ_UNDERRUN) {
-            return Error::STREAM_READ_UNDERRUN;
+            return Err(Error::STREAM_READ_UNDERRUN);
         } else if resp1.contains(ResponseBits::OCR_STREAM_WRITE_OVERRUN) {
-            return Error::STREAM_WRITE_OVERRUN;
+            return Err(Error::STREAM_WRITE_OVERRUN);
         } else if resp1.contains(ResponseBits::OCR_CID_CSD_OVERWRITE) {
-            return Error::CID_CSD_OVERWRITE;
+            return Err(Error::CID_CSD_OVERWRITE);
         } else if resp1.contains(ResponseBits::OCR_WP_ERASE_SKIP) {
-            return Error::WP_ERASE_SKIP;
+            return Err(Error::WP_ERASE_SKIP);
         } else if resp1.contains(ResponseBits::OCR_CARD_ECC_DISABLED) {
-            return Error::CARD_ECC_DISABLED;
+            return Err(Error::CARD_ECC_DISABLED);
         } else if resp1.contains(ResponseBits::OCR_ERASE_RESET) {
-            return Error::ERASE_RESET;
+            return Err(Error::ERASE_RESET);
         } else if resp1.contains(ResponseBits::OCR_AKE_SEQ_ERROR) {
-            return Error::AKE_SEQ_ERR;
+            return Err(Error::AKE_SEQ_ERR);
         }
-        Error::GENERAL_UNKNOWN_ERR
+        Err(Error::GENERAL_UNKNOWN_ERR)
     }
 
-    pub fn get_cmd_resp2(&mut self) -> Error {
+    pub fn get_cmd_resp2(&mut self) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
         let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
@@ -733,24 +731,24 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             }
             count -= 1;
             if count == 0 {
-                return Error::TIMEOUT;
+                return Err(Error::TIMEOUT);
             }
         }
         if star.ctimeout().bit() {
             self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
-            return Error::CMD_RSP_TIMEOUT;
+            return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         if star.ccrcfail().bit() {
             self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
-            return Error::CMD_CRC_FAIL;
+            return Err(Error::CMD_CRC_FAIL);
         }
 
         self.clear_static_flags();
-        Error::empty()
+        Ok(())
     }
 
-    pub fn get_cmd_resp3(&mut self) -> Error {
+    pub fn get_cmd_resp3(&mut self) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
         let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
@@ -767,20 +765,20 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             }
             count -= 1;
             if count == 0 {
-                return Error::TIMEOUT;
+                return Err(Error::TIMEOUT);
             }
         }
 
         if star.ctimeout().bit() {
             self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
-            return Error::CMD_RSP_TIMEOUT;
+            return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         self.clear_static_flags();
-        Error::empty()
+        Ok(())
     }
 
-    pub fn get_cmd_resp4(&mut self, response: &mut u32) -> Error {
+    pub fn get_cmd_resp4(&mut self, response: &mut u32) -> Result<(), Error> {
         let system_freq = 64_000_000;
         let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
 
@@ -796,22 +794,26 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             }
             count -= 1;
             if count == 0 {
-                return Error::TIMEOUT;
+                return Err(Error::TIMEOUT);
             }
         }
 
         if star.ctimeout().bit() {
             self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
-            return Error::CMD_RSP_TIMEOUT;
+            return Err(Error::CMD_RSP_TIMEOUT);
         }
         self.clear_static_flags();
         let resp = self.get_response(Resp::Resp1);
         *response = resp.bits();
 
-        Error::empty()
+        Ok(())
     }
 
-    pub fn get_cmd_resp5<C: CommandIndex>(&mut self, cmd: C, response: Option<&mut u8>) -> Error {
+    pub fn get_cmd_resp5<C: CommandIndex>(
+        &mut self,
+        cmd: C,
+        response: Option<&mut u8>,
+    ) -> Result<(), Error> {
         let system_freq = 64_000_000;
         let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
 
@@ -827,22 +829,22 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             }
             count -= 1;
             if count == 0 {
-                return Error::TIMEOUT;
+                return Err(Error::TIMEOUT);
             }
         }
 
         if star.ctimeout().bit() {
             self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
-            return Error::CMD_RSP_TIMEOUT;
+            return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         if star.ccrcfail().bit() {
             self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
-            return Error::CMD_CRC_FAIL;
+            return Err(Error::CMD_CRC_FAIL);
         }
 
         if self.get_cmd_resp() != cmd.into() as _ {
-            return Error::CMD_CRC_FAIL;
+            return Err(Error::CMD_CRC_FAIL);
         }
 
         self.clear_static_flags();
@@ -852,24 +854,24 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             if let Some(response) = response {
                 *response = (resp5.bits() & 0xFF) as u8;
             }
-            return Error::empty();
+            return Ok(());
         }
         if resp5.contains(ResponseBits::SDIO_R5_OUT_OF_RANGE) {
-            return Error::ADDR_OUTOF_RANGE;
+            return Err(Error::ADDR_OUTOF_RANGE);
         }
         if resp5.contains(ResponseBits::SDIO_R5_INVALID_FUNCTION_NUMBER) {
-            return Error::INVALID_PARAMETER;
+            return Err(Error::INVALID_PARAMETER);
         }
         if resp5.contains(ResponseBits::SDIO_R5_ILLEGAL_CMD) {
-            return Error::ILLEGAL_CMD;
+            return Err(Error::ILLEGAL_CMD);
         }
         if resp5.contains(ResponseBits::SDIO_R5_COM_CRC_FAILED) {
-            return Error::COM_CRC_FAILED;
+            return Err(Error::COM_CRC_FAILED);
         }
-        Error::GENERAL_UNKNOWN_ERR
+        Err(Error::GENERAL_UNKNOWN_ERR)
     }
 
-    pub fn get_cmd_resp6(&mut self, cmd: CmdIndex, rca: &mut u16) -> Error {
+    pub fn get_cmd_resp6(&mut self, cmd: CmdIndex) -> Result<u16, Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
         let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
@@ -886,22 +888,22 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             }
             count -= 1;
             if count == 0 {
-                return Error::TIMEOUT;
+                return Err(Error::TIMEOUT);
             }
         }
 
         if star.ctimeout().bit() {
             self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
-            return Error::CMD_RSP_TIMEOUT;
+            return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         if star.ccrcfail().bit() {
             self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
-            return Error::CMD_CRC_FAIL;
+            return Err(Error::CMD_CRC_FAIL);
         }
 
         if self.get_cmd_resp() != cmd as _ {
-            return Error::CMD_CRC_FAIL;
+            return Err(Error::CMD_CRC_FAIL);
         }
 
         self.clear_static_flags();
@@ -912,22 +914,21 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
                 | ResponseBits::R6_COM_CRC_FAILED))
             .is_empty()
         {
-            *rca = (response_r1.bits() >> 16) as _;
-            return Error::empty();
+            return Ok((response_r1.bits() >> 16) as _);
         }
 
         if response_r1.contains(ResponseBits::R6_ILLEGAL_CMD) {
-            return Error::ILLEGAL_CMD;
+            return Err(Error::ILLEGAL_CMD);
         }
 
         if response_r1.contains(ResponseBits::R6_COM_CRC_FAILED) {
-            return Error::COM_CRC_FAILED;
+            return Err(Error::COM_CRC_FAILED);
         }
 
-        Error::GENERAL_UNKNOWN_ERR
+        Err(Error::GENERAL_UNKNOWN_ERR)
     }
 
-    pub fn get_cmd_resp7(&mut self) -> Error {
+    pub fn get_cmd_resp7(&mut self) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
         let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
@@ -944,7 +945,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             }
             count -= 1;
             if count == 0 {
-                return Error::TIMEOUT;
+                return Err(Error::TIMEOUT);
             }
         }
 
@@ -954,10 +955,10 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         if star.cmdrend().bit() {
             self.peripheral.icr().write(|w| w.cmdrendc().bit(true));
         }
-        Error::empty()
+        Ok(())
     }
 
-    pub fn get_cmd_error(&mut self) -> Error {
+    pub fn get_cmd_error(&mut self) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
         let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
@@ -965,7 +966,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         loop {
             count += 1;
             if count == 0 {
-                return Error::TIMEOUT;
+                return Err(Error::TIMEOUT);
             }
 
             if self.peripheral.star().read().cmdsent().bit() {
@@ -974,10 +975,14 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         }
 
         self.clear_static_flags();
-        Error::empty()
+        Ok(())
     }
 
-    pub fn cmd_short1_nowfi_cpsm<C: CommandIndex>(&mut self, command: C, arg: u32) -> Error {
+    pub fn cmd_short1_nowfi_cpsm<C: CommandIndex>(
+        &mut self,
+        command: C,
+        arg: u32,
+    ) -> Result<(), Error> {
         self.send_command(Command {
             argument: arg,
             cmd_index: command,
@@ -989,51 +994,51 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         self.get_cmd_resp1(command, CMD_TIMEOUT)
     }
 
-    pub fn cmd_block_len(&mut self, block_size: u32) -> Error {
+    pub fn cmd_block_len(&mut self, block_size: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::SetBlockLen, block_size)
     }
 
-    pub fn cmd_block_count(&mut self, block_count: u32) -> Error {
+    pub fn cmd_block_count(&mut self, block_count: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::SetBlockCount, block_count)
     }
 
-    pub fn cmd_read_single_block(&mut self, read_addr: u32) -> Error {
+    pub fn cmd_read_single_block(&mut self, read_addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::ReadSingleBlock, read_addr)
     }
 
-    pub fn cmd_read_multi_block(&mut self, read_addr: u32) -> Error {
+    pub fn cmd_read_multi_block(&mut self, read_addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::ReadMultiBlock, read_addr)
     }
 
-    pub fn cmd_write_single_block(&mut self, write_addr: u32) -> Error {
+    pub fn cmd_write_single_block(&mut self, write_addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::WriteSingleBlock, write_addr)
     }
 
-    pub fn cmd_write_multi_block(&mut self, write_addr: u32) -> Error {
+    pub fn cmd_write_multi_block(&mut self, write_addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::WriteMultBlock, write_addr)
     }
 
-    pub fn cmd_sd_erase_start_add(&mut self, start_addr: u32) -> Error {
+    pub fn cmd_sd_erase_start_add(&mut self, start_addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::SdEraseGrpStart, start_addr)
     }
 
-    pub fn cmd_sd_erase_end_add(&mut self, end_addr: u32) -> Error {
+    pub fn cmd_sd_erase_end_add(&mut self, end_addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::SdEraseGrpEnd, end_addr)
     }
 
-    pub fn cmd_erase_start_add(&mut self, start_addr: u32) -> Error {
+    pub fn cmd_erase_start_add(&mut self, start_addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::EraseGrpStart, start_addr)
     }
 
-    pub fn cmd_erase_end_add(&mut self, end_addr: u32) -> Error {
+    pub fn cmd_erase_end_add(&mut self, end_addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::EraseGrpEnd, end_addr)
     }
 
-    pub fn cmd_erase(&mut self, erase_type: u32) -> Error {
+    pub fn cmd_erase(&mut self, erase_type: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::Erase, erase_type)
     }
 
-    pub fn cmd_stop_transfer(&mut self) -> Error {
+    pub fn cmd_stop_transfer(&mut self) -> Result<(), Error> {
         let command = CmdIndex::StopTransmission;
 
         self.peripheral
@@ -1048,21 +1053,21 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             cpsm: Cpsm::Enable,
         });
 
-        let err = self.get_cmd_resp1(command, CMD_TIMEOUT);
+        let res = self.get_cmd_resp1(command, CMD_TIMEOUT);
 
         self.peripheral.cmdr().write(|w| w.cmdstop().bit(false));
-        if err == Error::ADDR_OUTOF_RANGE {
-            return Error::empty();
+        if res == Err(Error::ADDR_OUTOF_RANGE) {
+            return Ok(());
         }
 
-        err
+        res
     }
 
-    pub fn cmd_select_deselect(&mut self, addr: u32) -> Error {
+    pub fn cmd_select_deselect(&mut self, addr: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::SelDeselCard, addr)
     }
 
-    pub fn cmd_go_idle_state(&mut self) -> Error {
+    pub fn cmd_go_idle_state(&mut self) -> Result<(), Error> {
         self.send_command(Command {
             argument: 0,
             cmd_index: CmdIndex::GoIdleState,
@@ -1074,7 +1079,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         self.get_cmd_error()
     }
 
-    pub fn cmd_oper_cond(&mut self) -> Error {
+    pub fn cmd_oper_cond(&mut self) -> Result<(), Error> {
         self.send_command(Command {
             argument: CHECK_PATTERN,
             cmd_index: CmdIndex::HsSendExtCsd,
@@ -1089,13 +1094,13 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     /// Send the Application command to verify that that the next command
     /// is an application specific com-mand rather than a standard command
     /// and check the response.
-    pub fn cmd_add_command(&mut self, argument: u32) -> Error {
+    pub fn cmd_add_command(&mut self, argument: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::AppCmd, argument)
     }
 
     /// SD Card Specific security command.
     /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
-    pub fn cmd_app_oper_command(&mut self, argument: u32) -> Error {
+    pub fn cmd_app_oper_command(&mut self, argument: u32) -> Result<(), Error> {
         self.send_command(Command {
             argument,
             cmd_index: SdCardCommand::SdAppOpCond,
@@ -1109,17 +1114,17 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
     /// SD Card Specific security command.
     /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
-    pub fn cmd_bus_wdith(&mut self, bus_width: u32) -> Error {
+    pub fn cmd_bus_wdith(&mut self, bus_width: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(SdCardCommand::AppSdSetBuswidth, bus_width)
     }
 
     /// SD Card Specific security command.
     /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
-    pub fn cmd_send_scr(&mut self) -> Error {
+    pub fn cmd_send_scr(&mut self) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(SdCardCommand::SdAppSendScr, 0)
     }
 
-    pub fn cmd_send_cid(&mut self) -> Error {
+    pub fn cmd_send_cid(&mut self) -> Result<(), Error> {
         let command = CmdIndex::AllSendCid;
         self.send_command(Command {
             argument: 0,
@@ -1132,7 +1137,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         self.get_cmd_resp2()
     }
 
-    pub fn cmd_send_csd(&mut self) -> Error {
+    pub fn cmd_send_csd(&mut self) -> Result<(), Error> {
         let command = CmdIndex::SendCsd;
         self.send_command(Command {
             argument: 0,
@@ -1145,7 +1150,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         self.get_cmd_resp2()
     }
 
-    pub fn cmd_set_rel_add(&mut self, rca: &mut u16) -> Error {
+    pub fn cmd_set_rel_add(&mut self) -> Result<u16, Error> {
         let cmd_index = CmdIndex::SetRelAddr;
         self.send_command(Command {
             argument: 0,
@@ -1154,32 +1159,32 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             wait_for_interrupt: WaitForInterrupt::No,
             cpsm: Cpsm::Enable,
         });
-        self.get_cmd_resp6(cmd_index, rca)
+        self.get_cmd_resp6(cmd_index)
     }
 
     /// Send the Set Relative Address command to MMC card (not SD card).
-    pub fn set_rel_add_mmc(&mut self, rca: u16) -> Error {
+    pub fn set_rel_add_mmc(&mut self, rca: u16) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::SetRelAddr, (rca as u32) << 16)
     }
 
     /// Send the Sleep command to MMC card (not SD card).
-    pub fn cmd_sleep_mmc(&mut self, argument: u32) -> Error {
+    pub fn cmd_sleep_mmc(&mut self, argument: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(MmcCommand::MmcSleepAwake, argument)
     }
 
-    pub fn cmd_send_status(&mut self, argument: u32) -> Error {
+    pub fn cmd_send_status(&mut self, argument: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::SendStatus, argument)
     }
 
     /// SD Card Specific security command.
     /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
-    pub fn cmd_status_register(&mut self) -> Error {
+    pub fn cmd_status_register(&mut self) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(SdCardCommand::SdAppStatus, 0)
     }
 
     /// Sends host capacity support information and activates the card's
     /// initialization process. Send SDMMC_CMD_SEND_OP_COND command
-    pub fn cmd_op_condition(&mut self, argument: u32) -> Error {
+    pub fn cmd_op_condition(&mut self, argument: u32) -> Result<(), Error> {
         let command = CmdIndex::SendOpCond;
         self.send_command(Command {
             argument,
@@ -1192,21 +1197,25 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         self.get_cmd_resp3()
     }
 
-    pub fn cmd_switch(&mut self, argument: u32) -> Error {
+    pub fn cmd_switch(&mut self, argument: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::HsSwitch, argument)
     }
 
-    pub fn cmd_voltage_switch(&mut self) -> Error {
+    pub fn cmd_voltage_switch(&mut self) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::VoltageSwitch, 0)
     }
 
-    pub fn cmd_send_ext_csd(&mut self, argument: u32) -> Error {
+    pub fn cmd_send_ext_csd(&mut self, argument: u32) -> Result<(), Error> {
         self.cmd_short1_nowfi_cpsm(CmdIndex::HsSendExtCsd, argument)
     }
 
     /// SD Card Specific security command.
     /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
-    pub fn sdio_cmd_read_write_direct(&mut self, argument: u32, response: &mut u8) -> Error {
+    pub fn sdio_cmd_read_write_direct(
+        &mut self,
+        argument: u32,
+        response: &mut u8,
+    ) -> Result<(), Error> {
         self.send_command(Command {
             argument,
             cmd_index: SdCardCommand::SdmmcRwDirect,
@@ -1220,7 +1229,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
     /// SD Card Specific security command.
     /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
-    pub fn sdio_cmd_read_write_extended(&mut self, argument: u32) -> Error {
+    pub fn sdio_cmd_read_write_extended(&mut self, argument: u32) -> Result<(), Error> {
         self.send_command(Command {
             argument,
             cmd_index: SdCardCommand::SdmmcRwExtended,
@@ -1234,7 +1243,11 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
     /// SD Card Specific security command.
     /// [`CmdIndex::AppCmd`][] should be sent before sending this command.
-    pub fn cmd_send_operation_condition(&mut self, argument: u32, response: &mut u32) -> Error {
+    pub fn cmd_send_operation_condition(
+        &mut self,
+        argument: u32,
+        response: &mut u32,
+    ) -> Result<(), Error> {
         self.send_command(Command {
             argument,
             cmd_index: CmdIndex::SdmmcSenOpCond,
@@ -1245,4 +1258,32 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
         self.get_cmd_resp4(response)
     }
+
+    pub fn config_data(&mut self, config: DataInit) {
+        self.peripheral
+            .dtimer()
+            .write(|w| unsafe { w.bits(config.data_time_out) });
+        self.peripheral
+            .dlenr()
+            .write(|w| unsafe { w.bits(config.data_len) });
+        self.peripheral.dctrl().write(|w| unsafe {
+            w.dblocksize()
+                .bits(config.data_block_size as u8 >> 4)
+                .dtdir()
+                .bit(matches!(config.transfer_dir, TransferDir::ToSdMmc))
+                .dtmode()
+                .bits((config.transfer_mode as u8) >> 2)
+                .dten()
+                .bit(matches!(config.dpsm, DpsmState::Enable))
+        });
+    }
+
+    pub fn cmd_trans_enable(&mut self) {
+        self.peripheral.cmdr().write(|w| w.cmdtrans().bit(true));
+    }
+    pub fn cmd_trans_disable(&mut self) {
+        self.peripheral.cmdr().write(|w| w.cmdtrans().bit(false));
+    }
 }
+
+pub const FIFO_SIZE: usize = 512;

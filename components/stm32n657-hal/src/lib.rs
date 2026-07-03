@@ -10,6 +10,7 @@ pub mod utils;
 
 pub mod bsec;
 pub mod gpio;
+pub mod mmc;
 pub mod rcc;
 pub mod sdmmc;
 pub mod timer;
