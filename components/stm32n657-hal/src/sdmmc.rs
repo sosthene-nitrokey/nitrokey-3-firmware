@@ -426,6 +426,17 @@ pub struct SdMmcMaster<P, S> {
     _state: PhantomData<S>,
 }
 
+impl<P: SdMmc, C> SdMmcMaster<P, C> {
+    pub fn init(&mut self, init: SdMMCInit) {
+        let tmpreg = init.clock_edge as u32
+            | init.clock_power_save as u32
+            | init.bus_wide as u32
+            | init.hardware_flow_control as u32
+            | init.clock_div as u32;
+        self.peripheral.clkcr().write(|w| unsafe { w.bits(tmpreg) });
+    }
+}
+
 impl<P: SdMmc> SdMmcMaster<P, Disabled> {
     pub fn new(peripheral: P) -> Self {
         Self {
@@ -434,13 +445,8 @@ impl<P: SdMmc> SdMmcMaster<P, Disabled> {
         }
     }
 
-    pub fn enable(self, init: SdMMCInit) -> SdMmcMaster<P, Enabled> {
-        let tmpreg = init.clock_edge as u32
-            | init.clock_power_save as u32
-            | init.bus_wide as u32
-            | init.hardware_flow_control as u32
-            | init.clock_div as u32;
-        self.peripheral.clkcr().write(|w| unsafe { w.bits(tmpreg) });
+    pub fn enable(mut self, init: SdMMCInit) -> SdMmcMaster<P, Enabled> {
+        self.init(init);
         SdMmcMaster {
             peripheral: self.peripheral,
             _state: PhantomData,

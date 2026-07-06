@@ -28,7 +28,7 @@ pub struct MmcMaster<P, S> {
     card_info: CardInfo,
     cid: [u32; 4],
     csd: [u32; 4],
-    ext_csd: [u32; 4],
+    ext_csd: [u32; 128],
     errorstate: Error,
     _state: PhantomData<S>,
 }
@@ -61,6 +61,7 @@ impl<P: SdMmc> MmcMaster<P, Disabled> {
             card_info: CardInfo::default(),
             cid: [0; 4],
             csd: [0; 4],
+            ext_csd: [0; 128],
             _state: PhantomData,
         }
     }
@@ -82,6 +83,7 @@ impl<P: SdMmc> MmcMaster<P, Disabled> {
             card_info: CardInfo::default(),
             cid: [0; 4],
             csd: [0; 4],
+            ext_csd: [0; 128],
             _state: PhantomData,
         };
         this.sdmmc.power_on();
@@ -219,7 +221,7 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         self.sdmmc
             .cmd_select_deselect((self.card_info.rca as u32) << 16)?;
 
-        let csd = self.get_card_csd()?;
+        let _csd = self.get_card_csd()?;
 
         if let Err(err) = self
             .sdmmc
@@ -230,7 +232,14 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
 
         self.ext_csd = self.get_card_ext_csd()?;
 
-        todo!()
+        if let Err(err) = self
+            .sdmmc
+            .cmd_send_status((self.card_info.rca as u32) << 16)
+        {
+            self.errorstate |= err;
+        }
+
+        Ok(())
     }
 
     fn get_card_csd(&mut self) -> Result<Csd, Error> {
@@ -440,7 +449,7 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         Ok(ret)
     }
 
-    fn get_card_ext_csd(&mut self) -> Result<[u32; 4], Error> {
+    fn get_card_ext_csd(&mut self) -> Result<[u32; 128], Error> {
         assert_eq!(self.state, State::Ready);
         self.errorstate.clear();
         self.state = State::Busy;
