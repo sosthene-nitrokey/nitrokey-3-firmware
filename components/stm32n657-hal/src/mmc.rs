@@ -16,6 +16,10 @@ pub struct CardInfo {
     /// Rel Card Add
     rca: u16,
     class: u32,
+    block_number: u32,
+    block_size: u32,
+    log_block_number: u32,
+    log_block_size: u32,
 }
 
 pub struct MmcMaster<P, S> {
@@ -24,6 +28,7 @@ pub struct MmcMaster<P, S> {
     card_info: CardInfo,
     cid: [u32; 4],
     csd: [u32; 4],
+    ext_csd: [u32; 4],
     errorstate: Error,
     _state: PhantomData<S>,
 }
@@ -214,23 +219,108 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         self.sdmmc
             .cmd_select_deselect((self.card_info.rca as u32) << 16)?;
 
+        let csd = self.get_card_csd()?;
+
+        if let Err(err) = self
+            .sdmmc
+            .cmd_send_status((self.card_info.rca as u32) << 16)
+        {
+            self.errorstate |= err;
+        }
+
+        self.ext_csd = self.get_card_ext_csd()?;
+
         todo!()
     }
 
     fn get_card_csd(&mut self) -> Result<Csd, Error> {
-        let mut tmp = Csd {
-            csd_struct: ((self.csd[0] & 0xC0000000) >> 30) as _,
-            sys_spec_version: ((self.csd[0] & 0x3C000000) >> 26) as _,
-            reserved1: ((self.csd[0] & 0x03000000) >> 24) as _,
-            taac: ((self.csd[0] & 0x00FF0000) >> 16) as _,
-            nsac: ((self.csd[0] & 0x0000FF00) >> 8) as _,
-            max_bus_clk_frec: (self.csd[0] & 0x000000FF) as _,
-            card_comd_classes: ((self.csd[1] & 0xFFF00000) >> 20) as _,
-            rd_block_len: ((self.csd[1] & 0x000F0000) >> 16) as _,
-            part_block_read: ((self.csd[1] & 0x00008000) >> 15) as _,
-            wr_block_misalign: ((self.csd[1] & 0x00004000) >> 14) as _,
-            rd_block_misalign: ((self.csd[1] & 0x00002000) >> 13) as _,
-            dsr_impl: ((self.csd[1] & 0x00001000) >> 12) as _,
+        let mut csd = Csd {
+            csd_struct: ((self.csd[0] & 0xC0000000) >> 30)
+                .try_into()
+                .expect("value to fit in u8"),
+            sys_spec_version: ((self.csd[0] & 0x3C000000) >> 26)
+                .try_into()
+                .expect("value to fit in u8"),
+            reserved1: ((self.csd[0] & 0x03000000) >> 24)
+                .try_into()
+                .expect("value to fit in u8"),
+            taac: ((self.csd[0] & 0x00FF0000) >> 16)
+                .try_into()
+                .expect("value to fit in u8"),
+            nsac: ((self.csd[0] & 0x0000FF00) >> 8)
+                .try_into()
+                .expect("value to fit in u8"),
+            max_bus_clk_frec: (self.csd[0] & 0x000000FF)
+                .try_into()
+                .expect("value to fit in u8"),
+            card_comd_classes: ((self.csd[1] & 0xFFF00000) >> 20)
+                .try_into()
+                .expect("value to fit in u8"),
+            rd_block_len: ((self.csd[1] & 0x000F0000) >> 16)
+                .try_into()
+                .expect("value to fit in u8"),
+            part_block_read: ((self.csd[1] & 0x00008000) >> 15)
+                .try_into()
+                .expect("value to fit in u8"),
+            wr_block_misalign: ((self.csd[1] & 0x00004000) >> 14)
+                .try_into()
+                .expect("value to fit in u8"),
+            rd_block_misalign: ((self.csd[1] & 0x00002000) >> 13)
+                .try_into()
+                .expect("value to fit in u8"),
+            dsr_impl: ((self.csd[1] & 0x00001000) >> 12)
+                .try_into()
+                .expect("value to fit in u8"),
+            erase_gr_size: ((self.csd[2] & 0x00004000) >> 14)
+                .try_into()
+                .expect("value to fit in u8"),
+            erase_gr_mul: ((self.csd[2] & 0x00003F80) >> 7)
+                .try_into()
+                .expect("value to fit in u8"),
+            wr_protect_gr_size: (self.csd[2] & 0x0000007F)
+                .try_into()
+                .expect("value to fit in u8"),
+            wr_protect_gr_enable: ((self.csd[3] & 0x80000000) >> 31)
+                .try_into()
+                .expect("value to fit in u8"),
+            man_defl_ec_c: ((self.csd[3] & 0x60000000) >> 29)
+                .try_into()
+                .expect("value to fit in u8"),
+            wr_speed_fact: ((self.csd[3] & 0x1C000000) >> 26)
+                .try_into()
+                .expect("value to fit in u8"),
+            max_wr_block_len: ((self.csd[3] & 0x03C00000) >> 22)
+                .try_into()
+                .expect("value to fit in u8"),
+            write_block_pa_partial: ((self.csd[3] & 0x00200000) >> 21)
+                .try_into()
+                .expect("value to fit in u8"),
+            content_protect_appli: ((self.csd[3] & 0x00010000) >> 16)
+                .try_into()
+                .expect("value to fit in u8"),
+            file_format_group: ((self.csd[3] & 0x00008000) >> 15)
+                .try_into()
+                .expect("value to fit in u8"),
+            copy_flag: ((self.csd[3] & 0x00004000) >> 14)
+                .try_into()
+                .expect("value to fit in u8"),
+            perm_wr_protect: ((self.csd[3] & 0x00002000) >> 13)
+                .try_into()
+                .expect("value to fit in u8"),
+            temp_wr_protect: ((self.csd[3] & 0x00001000) >> 12)
+                .try_into()
+                .expect("value to fit in u8"),
+            file_format: ((self.csd[3] & 0x00000C00) >> 10)
+                .try_into()
+                .expect("value to fit in u8"),
+            ecc: ((self.csd[3] & 0x00000300) >> 8)
+                .try_into()
+                .expect("value to fit in u8"),
+            csd_crc: ((self.csd[3] & 0x000000FE) >> 1)
+                .try_into()
+                .expect("value to fit in u8"),
+            reserved3: 0,
+            reserved4: 1,
             ..Default::default()
         };
 
@@ -238,19 +328,29 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
 
         match self.card_info.card_type {
             CardType::LowCapacity => {
-                tmp.device_size =
+                csd.device_size =
                     ((self.csd[1] & 0x000003FF) << 2) | ((self.csd[2] & 0xC0000000) >> 30);
-                tmp.max_rd_current_vdd_min = ((self.csd[2] & 0x38000000) >> 27) as u8;
-                tmp.max_rd_current_vdd_max = ((self.csd[2] & 0x07000000) >> 24) as u8;
-                tmp.max_wr_current_vdd_min = ((self.csd[2] & 0x00E00000) >> 21) as u8;
-                tmp.max_wr_current_vdd_max = ((self.csd[2] & 0x001C0000) >> 18) as u8;
-                tmp.device_size_mul = ((self.csd[2] & 0x00038000) >> 15) as u8;
-                self.card_info.block_number = todo!()
+                csd.max_rd_current_vdd_min = ((self.csd[2] & 0x38000000) >> 27) as u8;
+                csd.max_rd_current_vdd_max = ((self.csd[2] & 0x07000000) >> 24) as u8;
+                csd.max_wr_current_vdd_min = ((self.csd[2] & 0x00E00000) >> 21) as u8;
+                csd.max_wr_current_vdd_max = ((self.csd[2] & 0x001C0000) >> 18) as u8;
+                csd.device_size_mul = ((self.csd[2] & 0x00038000) >> 15) as u8;
+                self.card_info.block_number =
+                    (csd.device_size + 1) * (1 << ((csd.device_size_mul & 0x7) + 2));
+                self.card_info.block_size = 1 << csd.rd_block_len & 0xF;
+
+                self.card_info.log_block_number =
+                    self.card_info.block_number * self.card_info.block_size / BLOCK_SIZE;
+                self.card_info.log_block_size = BLOCK_SIZE;
             }
-            CardType::HighCapacity => {}
+            CardType::HighCapacity => {
+                self.card_info.block_number = block_number;
+                self.card_info.log_block_number = block_number;
+                self.card_info.block_size = BLOCK_SIZE;
+                self.card_info.log_block_size = BLOCK_SIZE;
+            }
         }
-        todo!();
-        Ok(tmp)
+        Ok(csd)
     }
 
     fn read_ext_csd(&mut self, field_index: u16, _timeout: u32) -> Result<u32, Error> {
@@ -339,4 +439,81 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         self.state = State::Ready;
         Ok(ret)
     }
+
+    fn get_card_ext_csd(&mut self) -> Result<[u32; 4], Error> {
+        assert_eq!(self.state, State::Ready);
+        self.errorstate.clear();
+        self.state = State::Busy;
+        self.sdmmc
+            .peripheral
+            .dctrl()
+            .write(|w| unsafe { w.bits(0) });
+
+        let config = sdmmc::DataInit {
+            data_time_out: 0xFFFFFFFF,
+            data_len: 512,
+            data_block_size: sdmmc::DataBlockSize::B512,
+            transfer_dir: TransferDir::ToSdMmc,
+            transfer_mode: TransferMode::Block,
+            dpsm: DpsmState::Disable,
+        };
+        self.sdmmc.config_data(config);
+        self.sdmmc.cmd_trans_enable();
+        let mut tmpbuf = [0; 128];
+
+        if let Err(err) = self.sdmmc.cmd_send_ext_csd(0) {
+            self.sdmmc.clear_static_flags();
+            self.errorstate |= err;
+            self.state = State::Ready;
+            return Err(err);
+        }
+
+        let mut dataremaining = 512;
+        let mut offset = 0;
+
+        let mut star;
+        while {
+            star = self.sdmmc.peripheral.star().read();
+            !(star.rxoverr().bit()
+                | star.dcrcfail().bit()
+                | star.dtimeout().bit()
+                | star.dataend().bit())
+        } {
+            if star.rxfifohf().bit() && dataremaining >= FIFO_SIZE {
+                for _ in 0..FIFO_SIZE / 4 {
+                    tmpbuf[offset] = self.sdmmc.read_fifo();
+                    offset += 1;
+                }
+                dataremaining -= FIFO_SIZE;
+            }
+            // TODO: timeout
+        }
+
+        self.sdmmc.cmd_trans_disable();
+
+        let star = self.sdmmc.peripheral.star().read();
+        if star.dtimeout().bit() {
+            self.sdmmc.clear_static_flags();
+            self.errorstate |= Error::TIMEOUT;
+            self.state = State::Ready;
+            return Err(Error::TIMEOUT);
+        } else if star.dcrcfail().bit() {
+            self.sdmmc.clear_static_flags();
+            self.errorstate |= Error::DATA_CRC_FAIL;
+            self.state = State::Ready;
+            return Err(Error::DATA_CRC_FAIL);
+        } else if star.rxoverr().bit() {
+            self.sdmmc.clear_static_flags();
+            self.errorstate |= Error::RX_OVERRUN;
+            self.state = State::Ready;
+            return Err(Error::RX_OVERRUN);
+        }
+
+        self.sdmmc.clear_static_flags();
+        self.state = State::Ready;
+
+        Ok(tmpbuf)
+    }
 }
+
+const BLOCK_SIZE: u32 = 512;
