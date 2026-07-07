@@ -185,7 +185,7 @@ pub enum DpsmState {
     Enable = 0x00000001,
 }
 
-pub struct DataInit {
+pub struct ConfigData {
     /// Data timeout period in card bus clock periods
     pub data_time_out: u32,
     /// Number of bytes to be transfered
@@ -1265,7 +1265,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         self.get_cmd_resp4(response)
     }
 
-    pub fn config_data(&mut self, config: DataInit) {
+    pub fn config_data(&mut self, config: ConfigData) {
         self.peripheral
             .dtimer()
             .write(|w| unsafe { w.bits(config.data_time_out) });
