@@ -652,4 +652,112 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         self.state = State::Ready;
         Ok(())
     }
+
+    pub fn write_blocks(
+        &mut self,
+        buffer: &[[u8; BLOCK_SIZE as _]],
+        raw_address: u32,
+    ) -> Result<(), Error> {
+        if !self.state.is_ready() {
+            return Err(Error::BUSY);
+        }
+        self.errorstate.clear();
+
+        if raw_address + buffer.len() as u32 > self.card_info.log_block_number {
+            return Err(Error::ADDR_OUTOF_RANGE);
+        }
+
+        if !raw_address.is_multiple_of(8) {
+            return Err(Error::ADDR_MISALIGNED);
+        }
+
+        self.state = State::Busy;
+        self.sdmmc
+            .peripheral
+            .dctrl()
+            .write(|w| unsafe { w.bits(0) });
+
+        let address = if self.card_info.card_type == CardType::HighCapacity {
+            raw_address * BLOCK_SIZE
+        } else {
+            raw_address
+        };
+
+        self.sdmmc.config_data(sdmmc::ConfigData {
+            data_time_out: 0xFFFFFFFF,
+            data_len: buffer.len() as u32 * BLOCK_SIZE,
+            data_block_size: sdmmc::DataBlockSize::B512,
+            transfer_dir: TransferDir::ToCard,
+            transfer_mode: TransferMode::Block,
+            dpsm: DpsmState::Disable,
+        });
+        self.sdmmc.cmd_trans_enable();
+
+        let cmd_res = match buffer.len() {
+            0 => panic!("Reading 0 blocks"),
+            1 => self.sdmmc.cmd_write_single_block(address),
+            _ => self.sdmmc.cmd_write_multi_block(address),
+        };
+
+        if let Err(err) = cmd_res {
+            self.sdmmc.clear_static_flags();
+            self.state = State::Ready;
+            self.errorstate |= err;
+            return Err(err);
+        }
+
+        let mut star;
+        let mut dataremaining = buffer.len() * BLOCK_SIZE as usize;
+        let mut offset = 0;
+        let buf = buffer.as_flattened();
+        while {
+            star = self.sdmmc.peripheral.star().read();
+            !(star.rxoverr().bit()
+                | star.dcrcfail().bit()
+                | star.dtimeout().bit()
+                | star.dataend().bit())
+        } {
+            if star.rxfifohf().bit() && dataremaining > FIFO_SIZE {
+                for _ in 0..FIFO_SIZE / 4 {
+                    self.sdmmc
+                        .write_fifo(u32::from_le_bytes(buf[offset..][..4].try_into().unwrap()));
+                    offset += 4;
+                }
+                dataremaining -= FIFO_SIZE;
+            }
+
+            // TODO: timeout
+        }
+
+        self.sdmmc.cmd_trans_disable();
+
+        if star.dataend().bit() && buffer.len() > 1 {
+            if let Err(err) = self.sdmmc.cmd_stop_transfer() {
+                self.sdmmc.clear_static_flags();
+                self.state = State::Ready;
+                self.errorstate |= err;
+                return Err(err);
+            }
+        }
+        if star.dtimeout().bit() {
+            self.sdmmc.clear_static_flags();
+            self.errorstate |= Error::TIMEOUT;
+            self.state = State::Ready;
+            return Err(Error::TIMEOUT);
+        } else if star.dcrcfail().bit() {
+            self.sdmmc.clear_static_flags();
+            self.errorstate |= Error::DATA_CRC_FAIL;
+            self.state = State::Ready;
+            return Err(Error::DATA_CRC_FAIL);
+        } else if star.rxoverr().bit() {
+            self.sdmmc.clear_static_flags();
+            self.errorstate |= Error::RX_OVERRUN;
+            self.state = State::Ready;
+            return Err(Error::RX_OVERRUN);
+        }
+
+        self.sdmmc.clear_static_flags();
+        self.state = State::Ready;
+        Ok(())
+    }
 }
