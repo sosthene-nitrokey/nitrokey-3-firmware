@@ -528,6 +528,9 @@ bitflags! {
                                                       Self::SDIO_R5_GENERAL_UNKNOWN_ERROR.bits()   |
                                                       Self::SDIO_R5_INVALID_FUNCTION_NUMBER.bits() |
                                                       Self::SDIO_R5_OUT_OF_RANGE.bits());
+        const SDMMC_WIDE_BUS_SUPPORT          = 0x00040000;
+        const SDMMC_SINGLE_BUS_SUPPORT        = 0x00010000;
+        const SDMMC_CARD_LOCKED               = 0x02000000;
     }
 }
 

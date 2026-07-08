@@ -1,6 +1,6 @@
-use core::marker::PhantomData;
+use core::{marker::PhantomData, ops::Range};
 
-use bitflags::Flags;
+use bitflags::{Flags, bitflags};
 
 use crate::{
     rcc::Rcc,
@@ -10,12 +10,19 @@ use crate::{
     },
 };
 
+bitflags! {
+    #[derive(Debug, Clone, Copy, Default)]
+    pub struct Class: u32 {
+        const ERASE = 0x00000020;
+    }
+}
+
 #[derive(Default)]
 pub struct CardInfo {
     card_type: CardType,
     /// Rel Card Add
     rca: u16,
-    class: u32,
+    class: Class,
     block_number: u32,
     block_size: u32,
     log_block_number: u32,
@@ -228,7 +235,8 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         self.csd[2] = self.sdmmc.get_response(Resp::Resp3).bits();
         self.csd[3] = self.sdmmc.get_response(Resp::Resp4).bits();
 
-        self.card_info.class = self.sdmmc.get_response(Resp::Resp2).bits() >> 20;
+        self.card_info.class =
+            Class::from_bits_retain(self.sdmmc.get_response(Resp::Resp2).bits() >> 20);
 
         self.sdmmc
             .cmd_select_deselect((self.card_info.rca as u32) << 16)?;
@@ -757,6 +765,63 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         }
 
         self.sdmmc.clear_static_flags();
+        self.state = State::Ready;
+        Ok(())
+    }
+
+    pub fn erase(&mut self, blocks_addr: Range<u32>) -> Result<(), Error> {
+        if !self.state.is_ready() {
+            return Err(Error::BUSY);
+        }
+        assert!(blocks_addr.end >= blocks_addr.start);
+        self.errorstate.clear();
+
+        if (self.ext_csd[61 / 4] >> 8) & 0xFF != 0
+            && !(blocks_addr.start.is_multiple_of(8) && blocks_addr.end.is_multiple_of(8))
+        {
+            return Err(Error::ADDR_MISALIGNED);
+        }
+
+        self.state = State::Busy;
+
+        if !self.card_info.class.contains(Class::ERASE) {
+            self.sdmmc.clear_static_flags();
+            self.state = State::Ready;
+            return Err(Error::REQUEST_NOT_APPLICABLE);
+        }
+
+        if self
+            .sdmmc
+            .get_response(Resp::Resp1)
+            .contains(ResponseBits::SDMMC_CARD_LOCKED)
+        {
+            self.sdmmc.clear_static_flags();
+            self.state = State::Ready;
+            return Err(Error::LOCK_UNLOCK_FAILED);
+        }
+
+        let blocks = match self.card_info.card_type {
+            CardType::HighCapacity => blocks_addr.start * 8..blocks_addr.end * 8,
+            CardType::LowCapacity => blocks_addr,
+        };
+
+        if let Err(err) = self.sdmmc.cmd_erase_start_add(blocks.start) {
+            self.sdmmc.clear_static_flags();
+            self.state = State::Ready;
+            return Err(err);
+        }
+
+        if let Err(err) = self.sdmmc.cmd_erase_end_add(blocks.end) {
+            self.sdmmc.clear_static_flags();
+            self.state = State::Ready;
+            return Err(err);
+        }
+
+        if let Err(err) = self.sdmmc.cmd_erase(0) {
+            self.sdmmc.clear_static_flags();
+            self.state = State::Ready;
+            return Err(err);
+        }
         self.state = State::Ready;
         Ok(())
     }
