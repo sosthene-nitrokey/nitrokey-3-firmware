@@ -3,12 +3,25 @@ use core::{marker::PhantomData, ops::Deref};
 use bitflags::bitflags;
 use stm32n6::stm32n657::{SDMMC1, SDMMC2, sdmmc1};
 
-use crate::utils::enum_u;
+use crate::{
+    rcc::{Peripheral, Rcc},
+    utils::enum_u,
+};
 
-pub trait SdMmc: Deref<Target = sdmmc1::RegisterBlock> {}
+pub trait SdMmc: Deref<Target = sdmmc1::RegisterBlock> {
+    fn enable_clk(&self, rcc: &Rcc);
+}
 
-impl SdMmc for SDMMC1 {}
-impl SdMmc for SDMMC2 {}
+impl SdMmc for SDMMC1 {
+    fn enable_clk(&self, rcc: &Rcc) {
+        rcc.enable(Peripheral::Sdmmc1);
+    }
+}
+impl SdMmc for SDMMC2 {
+    fn enable_clk(&self, rcc: &Rcc) {
+        rcc.enable(Peripheral::Sdmmc2);
+    }
+}
 
 /// Specifies the SDMMC_CCK clock transition on which Data and Command change.g
 #[repr(u32)]

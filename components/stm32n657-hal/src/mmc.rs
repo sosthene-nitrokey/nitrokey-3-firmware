@@ -47,6 +47,7 @@ enum CardType {
     HighCapacity,
 }
 
+#[expect(unused)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum State {
     Reset = 0,
@@ -79,7 +80,7 @@ impl<P: SdMmc> MmcMaster<P, Disabled> {
         }
     }
 
-    pub fn enable(self, _rcc: &Rcc) -> Result<MmcMaster<P, Enabled>, Error> {
+    pub fn enable(self, rcc: &Rcc) -> Result<MmcMaster<P, Enabled>, Error> {
         let init = sdmmc::SdMMCInit {
             clock_edge: sdmmc::ClockEdge::Rising,
             clock_power_save: sdmmc::ClockPowerSave::Disable,
@@ -88,6 +89,8 @@ impl<P: SdMmc> MmcMaster<P, Disabled> {
             clock_div: 0, // TODO get proper clock divider
             is_transceiver_present: 0,
         };
+
+        self.sdmmc.peripheral.enable_clk(rcc);
         let sdmmc = self.sdmmc.enable(init);
         let mut this = MmcMaster {
             errorstate: Error::empty(),
@@ -115,9 +118,10 @@ impl<P: SdMmc> MmcMaster<P, Disabled> {
     }
 }
 
+#[expect(unused)]
 #[derive(Default)]
 struct Csd {
-    ///*!< CSD structure                         
+    /// CSD structure                         
     csd_struct: u8,
     ///System specification version          
     sys_spec_version: u8,
@@ -609,7 +613,7 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         let mut star;
         let mut dataremaining = buffer.len() * BLOCK_SIZE as usize;
         let mut offset = 0;
-        let mut buf = buffer.as_flattened_mut();
+        let buf = buffer.as_flattened_mut();
         while {
             star = self.sdmmc.peripheral.star().read();
             !(star.rxoverr().bit()

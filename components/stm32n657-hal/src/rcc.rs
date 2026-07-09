@@ -27,21 +27,37 @@ impl Rcc {
 
     pub fn enable(&self, peripheral: Peripheral) {
         match peripheral {
+            Peripheral::GpioA => self.0.ahb4ensr().write(|w| w.gpioaens().set_bit()),
+            Peripheral::GpioB => self.0.ahb4ensr().write(|w| w.gpiobens().set_bit()),
             Peripheral::GpioC => self.0.ahb4ensr().write(|w| w.gpiocens().set_bit()),
+            Peripheral::GpioD => self.0.ahb4ensr().write(|w| w.gpiodens().set_bit()),
+            Peripheral::GpioE => self.0.ahb4ensr().write(|w| w.gpioeens().set_bit()),
+            Peripheral::GpioF => self.0.ahb4ensr().write(|w| w.gpiofens().set_bit()),
             Peripheral::GpioG => self.0.ahb4ensr().write(|w| w.gpiogens().set_bit()),
+            Peripheral::GpioH => self.0.ahb4ensr().write(|w| w.gpiohens().set_bit()),
             Peripheral::Rtc => self.0.apb4lensr().write(|w| w.rtcens().set_bit()),
             Peripheral::Tim6 => self.0.apb1lensr().write(|w| w.tim6ens().set_bit()),
             Peripheral::Tim7 => self.0.apb1lensr().write(|w| w.tim7ens().set_bit()),
+            Peripheral::Sdmmc1 => self.0.ahb5ensr().write(|w| w.sdmmc1ens().set_bit()),
+            Peripheral::Sdmmc2 => self.0.ahb5ensr().write(|w| w.sdmmc2ens().set_bit()),
         };
     }
 }
 
 pub enum Peripheral {
+    GpioA,
+    GpioB,
     GpioC,
+    GpioD,
+    GpioE,
+    GpioF,
     GpioG,
+    GpioH,
     Rtc,
     Tim6,
     Tim7,
+    Sdmmc1,
+    Sdmmc2,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
