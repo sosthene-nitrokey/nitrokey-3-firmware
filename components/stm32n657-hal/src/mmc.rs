@@ -3,12 +3,14 @@ use core::{marker::PhantomData, ops::Range};
 use bitflags::{Flags, bitflags};
 
 use crate::{
+    gpio::*,
     rcc::Rcc,
     sdmmc::{
-        self, Disabled, DpsmState, Enabled, Error, FIFO_SIZE, PowerCtrl, Resp, ResponseBits, SdMmc,
-        SdMmcMaster, TransferDir, TransferMode,
+        self, BusWidth, Disabled, DpsmState, Enabled, Error, FIFO_SIZE, PowerCtrl, Resp,
+        ResponseBits, SdMmc, SdMmcMaster, TransferDir, TransferMode,
     },
 };
+use stm32n6::stm32n657::{SDMMC1, SDMMC2};
 
 bitflags! {
     #[derive(Debug, Clone, Copy, Default)]
@@ -29,7 +31,7 @@ pub struct CardInfo {
     log_block_size: u32,
 }
 
-pub struct MmcMaster<P, S> {
+pub struct MmcMaster<P, Pins, S> {
     sdmmc: SdMmcMaster<P, S>,
     state: State,
     card_info: CardInfo,
@@ -37,7 +39,7 @@ pub struct MmcMaster<P, S> {
     csd: [u32; 4],
     ext_csd: [u32; 128],
     errorstate: Error,
-    _state: PhantomData<S>,
+    _state: PhantomData<(S, Pins)>,
 }
 
 #[derive(Default, PartialEq)]
@@ -66,7 +68,7 @@ impl State {
     }
 }
 
-impl<P: SdMmc> MmcMaster<P, Disabled> {
+impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Disabled> {
     pub fn new(peripheral: P) -> Self {
         Self {
             errorstate: Error::empty(),
@@ -80,11 +82,11 @@ impl<P: SdMmc> MmcMaster<P, Disabled> {
         }
     }
 
-    pub fn enable(self, rcc: &Rcc) -> Result<MmcMaster<P, Enabled>, Error> {
+    pub fn enable(self, rcc: &Rcc) -> Result<MmcMaster<P, Pins, Enabled>, Error> {
         let init = sdmmc::SdMMCInit {
             clock_edge: sdmmc::ClockEdge::Rising,
             clock_power_save: sdmmc::ClockPowerSave::Disable,
-            bus_wide: sdmmc::BusWidth::OneBit,
+            bus_wide: Pins::WIDTH,
             hardware_flow_control: sdmmc::HardwareFlowControl::Disable,
             clock_div: 0, // TODO get proper clock divider
             is_transceiver_present: 0,
@@ -196,7 +198,7 @@ struct Csd {
     /// Always 1                              
     reserved4: u8,
 }
-impl<P: SdMmc> MmcMaster<P, Enabled> {
+impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Enabled> {
     fn power_on(&mut self) -> Result<(), Error> {
         self.sdmmc.cmd_go_idle_state()?;
 
@@ -551,7 +553,7 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
 
 const BLOCK_SIZE: u32 = 512;
 
-impl<P: SdMmc> MmcMaster<P, Enabled> {
+impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Enabled> {
     pub fn free(mut self) -> SdMmcMaster<P, Enabled> {
         self.sdmmc.power_off();
         self.sdmmc
@@ -829,4 +831,126 @@ impl<P: SdMmc> MmcMaster<P, Enabled> {
         self.state = State::Ready;
         Ok(())
     }
+}
+
+pub trait D0 {
+    type Peripheral;
+}
+pub trait D1 {
+    type Peripheral;
+}
+pub trait D2 {
+    type Peripheral;
+}
+pub trait D3 {
+    type Peripheral;
+}
+pub trait D4 {
+    type Peripheral;
+}
+pub trait D5 {
+    type Peripheral;
+}
+pub trait D6 {
+    type Peripheral;
+}
+pub trait D7 {
+    type Peripheral;
+}
+pub trait Cmd {
+    type Peripheral;
+}
+pub trait Ck {
+    type Peripheral;
+}
+
+macro_rules! pins {
+    ($(($pin:ident, $alt:ident, $function:ident, $peripheral:ident)),*$(,)?) => {$(
+        impl $function for $pin<Alternate<PullUp, $alt>> {
+          type Peripheral = $peripheral;
+        }
+    )*};
+}
+
+pins! {
+    (PinA0, ALTERNATE_FUNCTION_11, Cmd, SDMMC2),
+    (PinB4, ALTERNATE_FUNCTION_11, D3, SDMMC2),
+    (PinB8, ALTERNATE_FUNCTION_11, D0, SDMMC2),
+    (PinB9, ALTERNATE_FUNCTION_11, D2, SDMMC2),
+    (PinB13, ALTERNATE_FUNCTION_11, D6, SDMMC2),
+    (PinC0, ALTERNATE_FUNCTION_11, D2, SDMMC2),
+    (PinC1, ALTERNATE_FUNCTION_11, D5, SDMMC2),
+    (PinC2, ALTERNATE_FUNCTION_11, Ck, SDMMC2),
+    (PinC3, ALTERNATE_FUNCTION_11, Cmd, SDMMC2),
+    (PinC4, ALTERNATE_FUNCTION_11, D0, SDMMC2),
+    (PinC5, ALTERNATE_FUNCTION_11, D1, SDMMC2),
+    (PinC6, ALTERNATE_FUNCTION_10, D6, SDMMC1),
+    (PinC6, ALTERNATE_FUNCTION_11, D6, SDMMC2),
+    // (PinC6, ALTERNATE_FUNCTION_12, D0dir, SDMMC1),
+    (PinC7, ALTERNATE_FUNCTION_10, D7, SDMMC1),
+    (PinC7, ALTERNATE_FUNCTION_11, D7, SDMMC2),
+    // (PinC7, ALTERNATE_FUNCTION_12, D123dir, SDMMC1),
+    (PinC8, ALTERNATE_FUNCTION_10, D0, SDMMC1),
+    (PinC9, ALTERNATE_FUNCTION_10, D1, SDMMC1),
+    (PinC10, ALTERNATE_FUNCTION_10, D2, SDMMC1),
+    (PinC11, ALTERNATE_FUNCTION_10, D3, SDMMC1),
+    (PinC12, ALTERNATE_FUNCTION_10, Ck, SDMMC1),
+    (PinD2, ALTERNATE_FUNCTION_11, Ck, SDMMC2),
+    (PinD5, ALTERNATE_FUNCTION_11, D7, SDMMC2),
+    (PinD11, ALTERNATE_FUNCTION_10, D0, SDMMC1),
+    (PinD15, ALTERNATE_FUNCTION_10, D0, SDMMC1),
+    (PinE4, ALTERNATE_FUNCTION_11, D3, SDMMC2),
+    (PinE15, ALTERNATE_FUNCTION_11, D0, SDMMC1),
+    (PinG8, ALTERNATE_FUNCTION_11, D1, SDMMC2),
+    (PinH2, ALTERNATE_FUNCTION_10, Cmd, SDMMC1),
+    (PinH8, ALTERNATE_FUNCTION_11, D1, SDMMC2),
+    (PinH9, ALTERNATE_FUNCTION_10, D4, SDMMC1),
+    (PinH9, ALTERNATE_FUNCTION_11, D4, SDMMC2),
+    // (PinH9, ALTERNATE_FUNCTION_12, Ckin, SDMMC1),
+}
+
+pub trait MmcPins {
+    type Peripheral;
+    const WIDTH: BusWidth;
+}
+
+impl<P, P1, P2, P3> MmcPins for (P1, P2, P3)
+where
+    P1: Cmd<Peripheral = P>,
+    P2: Ck<Peripheral = P>,
+    P3: D0<Peripheral = P>,
+{
+    type Peripheral = P;
+    const WIDTH: BusWidth = BusWidth::OneBit;
+}
+
+impl<P, P1, P2, P3, P4, P5, P6> MmcPins for (P1, P2, P3, P4, P5, P6)
+where
+    P1: Cmd<Peripheral = P>,
+    P2: Ck<Peripheral = P>,
+    P3: D0<Peripheral = P>,
+    P4: D1<Peripheral = P>,
+    P5: D2<Peripheral = P>,
+    P6: D3<Peripheral = P>,
+{
+    type Peripheral = P;
+    const WIDTH: BusWidth = BusWidth::FourBit;
+}
+
+impl<P, P1, P2, P3, P4, P5, P6, P7, P8, P9, P10> MmcPins
+    for (P1, P2, P3, P4, P5, P6, P7, P8, P9, P10)
+where
+    P1: Cmd<Peripheral = P>,
+    P2: Ck<Peripheral = P>,
+    P3: D0<Peripheral = P>,
+    P4: D1<Peripheral = P>,
+    P5: D2<Peripheral = P>,
+    P6: D3<Peripheral = P>,
+    P7: D4<Peripheral = P>,
+    P8: D5<Peripheral = P>,
+    P9: D6<Peripheral = P>,
+    P10: D7<Peripheral = P>,
+{
+    type Peripheral = P;
+    const WIDTH: BusWidth = BusWidth::EightBit;
 }
