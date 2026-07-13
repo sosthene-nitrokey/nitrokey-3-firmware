@@ -118,23 +118,23 @@ pub enum Cpsm {
 pub trait CommandIndex: Into<u32> + Copy {}
 
 impl CommandIndex for CmdIndex {}
-impl Into<u32> for CmdIndex {
-    fn into(self) -> u32 {
-        self as _
+impl From<CmdIndex> for u32 {
+    fn from(val: CmdIndex) -> Self {
+        val as _
     }
 }
 
 impl CommandIndex for SdCardCommand {}
-impl Into<u32> for SdCardCommand {
-    fn into(self) -> u32 {
-        self as _
+impl From<SdCardCommand> for u32 {
+    fn from(val: SdCardCommand) -> Self {
+        val as _
     }
 }
 
 impl CommandIndex for MmcCommand {}
-impl Into<u32> for MmcCommand {
-    fn into(self) -> u32 {
-        self as _
+impl From<MmcCommand> for u32 {
+    fn from(val: MmcCommand) -> Self {
+        val as _
     }
 }
 
@@ -737,7 +737,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     pub fn get_cmd_resp2(&mut self) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
+        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
 
         let mut star;
         loop {
@@ -771,7 +771,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     pub fn get_cmd_resp3(&mut self) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
+        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
 
         let mut star;
         loop {
@@ -800,7 +800,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
     pub fn get_cmd_resp4(&mut self, response: &mut u32) -> Result<(), Error> {
         let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
+        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
 
         let mut star;
         loop {
@@ -835,7 +835,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         response: Option<&mut u8>,
     ) -> Result<(), Error> {
         let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
+        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
 
         let mut star;
         loop {
@@ -894,7 +894,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     pub fn get_cmd_resp6(&mut self, cmd: CmdIndex) -> Result<u16, Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
+        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
 
         let mut star;
         loop {
@@ -951,7 +951,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     pub fn get_cmd_resp7(&mut self) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
+        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
 
         let mut star;
         loop {
@@ -981,7 +981,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     pub fn get_cmd_error(&mut self) -> Result<(), Error> {
         // TODO: get real freq
         let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * system_freq / 8 / 1000;
+        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
 
         loop {
             count += 1;
