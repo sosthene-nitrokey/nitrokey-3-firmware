@@ -489,6 +489,14 @@ enum_u!(
     }
 );
 
+const fn calc_timeout(timeout_seconds: u32) -> u32 {
+    // TODO: get real system freq
+    let system_freq = 0;
+
+    timeout_seconds * (system_freq / 8 / 1000)
+    // return 10;
+}
+
 const CMD_TIMEOUT: u32 = 5000;
 
 bitflags! {
@@ -652,9 +660,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
     /// Checks for error conditions for R1 response.
     pub fn get_cmd_resp1<C: CommandIndex>(&mut self, cmd: C, timeout: u32) -> Result<(), Error> {
-        // TODO: get real freq
-        let system_freq = 64_000_000;
-        let mut count = timeout * system_freq / 8 / 1000;
+        let mut count = calc_timeout(timeout);
         let mut star;
         loop {
             count -= 1;
@@ -735,9 +741,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     pub fn get_cmd_resp2(&mut self) -> Result<(), Error> {
-        // TODO: get real freq
-        let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
+        let mut count = calc_timeout(CMD_TIMEOUT);
 
         let mut star;
         loop {
@@ -769,9 +773,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     pub fn get_cmd_resp3(&mut self) -> Result<(), Error> {
-        // TODO: get real freq
-        let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
+        let mut count = calc_timeout(CMD_TIMEOUT);
 
         let mut star;
         loop {
@@ -799,8 +801,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     pub fn get_cmd_resp4(&mut self, response: &mut u32) -> Result<(), Error> {
-        let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
+        let mut count = calc_timeout(CMD_TIMEOUT);
 
         let mut star;
         loop {
@@ -834,8 +835,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         cmd: C,
         response: Option<&mut u8>,
     ) -> Result<(), Error> {
-        let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
+        let mut count = calc_timeout(CMD_TIMEOUT);
 
         let mut star;
         loop {
@@ -892,9 +892,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     pub fn get_cmd_resp6(&mut self, cmd: CmdIndex) -> Result<u16, Error> {
-        // TODO: get real freq
-        let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
+        let mut count = calc_timeout(CMD_TIMEOUT);
 
         let mut star;
         loop {
@@ -949,9 +947,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     pub fn get_cmd_resp7(&mut self) -> Result<(), Error> {
-        // TODO: get real freq
-        let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
+        let mut count = calc_timeout(CMD_TIMEOUT);
 
         let mut star;
         loop {
@@ -979,12 +975,10 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     pub fn get_cmd_error(&mut self) -> Result<(), Error> {
-        // TODO: get real freq
-        let system_freq = 64_000_000;
-        let mut count = CMD_TIMEOUT * (system_freq / 8 / 1000);
+        let mut count = calc_timeout(CMD_TIMEOUT);
 
         loop {
-            count += 1;
+            count -= 1;
             if count == 0 {
                 return Err(Error::TIMEOUT);
             }

@@ -136,7 +136,6 @@ macro_rules! impl_pin {
                 self.gpio()
                     .moder()
                     .modify(|_, w| unsafe { w.$mode().bits(0b10) });
-                // pupd: 01 = pull-up
                 self.gpio()
                     .pupdr()
                     .modify(|_, w| unsafe { w.$pupd().bits(R::VALUE) });

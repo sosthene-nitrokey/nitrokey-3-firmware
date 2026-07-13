@@ -39,7 +39,8 @@ pub struct MmcMaster<P, Pins, S> {
     csd: [u32; 4],
     ext_csd: [u32; 128],
     errorstate: Error,
-    _state: PhantomData<(S, Pins)>,
+    pins: Pins,
+    _state: PhantomData<S>,
 }
 
 #[derive(Default, PartialEq)]
@@ -69,7 +70,7 @@ impl State {
 }
 
 impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Disabled> {
-    pub fn new(peripheral: P) -> Self {
+    pub fn new(peripheral: P, pins: Pins) -> Self {
         Self {
             errorstate: Error::empty(),
             sdmmc: SdMmcMaster::new(peripheral),
@@ -78,6 +79,7 @@ impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Disabled> {
             cid: [0; 4],
             csd: [0; 4],
             ext_csd: [0; 128],
+            pins,
             _state: PhantomData,
         }
     }
@@ -102,6 +104,7 @@ impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Disabled> {
             cid: [0; 4],
             csd: [0; 4],
             ext_csd: [0; 128],
+            pins: self.pins,
             _state: PhantomData,
         };
         this.sdmmc.power_on();
