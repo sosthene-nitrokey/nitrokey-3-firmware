@@ -563,7 +563,7 @@ impl ReadWaitMode {
 
 impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     pub fn clear_static_flags(&mut self) {
-        self.peripheral.icr().write(|w| {
+        self.peripheral.icr().modify(|_, w| {
             w.ccrcfailc()
                 .bit(true)
                 .ctimeoutc()
@@ -575,29 +575,27 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
     pub fn read_fifo(&mut self) -> u32 {
         // The C hal only reads/writes the 0x80 register for FIFO
-        self.peripheral.fifor0().read().fifodata().bits()
+        self.peripheral.fifor0().read().bits()
     }
 
     pub fn write_fifo(&mut self, value: u32) {
-        self.peripheral
-            .fifor0()
-            .write(|w| unsafe { w.fifodata().bits(value) });
+        self.peripheral.fifor0().write(|w| unsafe { w.bits(value) });
     }
 
     pub fn power_on(&mut self) {
         self.peripheral
             .power()
-            .write(|w| unsafe { w.pwrctrl().bits(PowerCtrl::On as _) });
+            .modify(|_, w| unsafe { w.pwrctrl().bits(PowerCtrl::On as _) });
     }
     pub fn power_off(&mut self) {
         self.peripheral
             .power()
-            .write(|w| unsafe { w.pwrctrl().bits(PowerCtrl::Off as _) });
+            .modify(|_, w| unsafe { w.pwrctrl().bits(PowerCtrl::Off as _) });
     }
     pub fn power_cycle(&mut self) {
         self.peripheral
             .power()
-            .write(|w| unsafe { w.pwrctrl().bits(PowerCtrl::Cycle as _) });
+            .modify(|_, w| unsafe { w.pwrctrl().bits(PowerCtrl::Cycle as _) });
     }
 
     pub fn power(&self) -> PowerCtrl {
@@ -639,13 +637,13 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     /// Why is this the same as read_fifo?
     pub fn fifo_count(&mut self) -> u32 {
         // The C hal only reads/writes the 0x80 register for FIFO
-        self.peripheral.fifor0().read().fifodata().bits()
+        self.peripheral.fifor0().read().bits()
     }
 
     pub fn set_read_wait_mode(&mut self, read_wait_mode: ReadWaitMode) {
         self.peripheral
             .dctrl()
-            .write(|w| w.rwmod().bit(read_wait_mode.bit()));
+            .modify(|_, w| w.rwmod().bit(read_wait_mode.bit()));
     }
 
     pub fn get_cmd_resp(&mut self) -> u8 {
@@ -676,12 +674,12 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         }
 
         if star.ctimeout().bit() {
-            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ctimeoutc().bit(true));
             return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         if star.ccrcfail().bit() {
-            self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ccrcfailc().bit(true));
             return Err(Error::CMD_CRC_FAIL);
         }
 
@@ -757,12 +755,12 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
             }
         }
         if star.ctimeout().bit() {
-            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ctimeoutc().bit(true));
             return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         if star.ccrcfail().bit() {
-            self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ccrcfailc().bit(true));
             return Err(Error::CMD_CRC_FAIL);
         }
 
@@ -792,7 +790,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         }
 
         if star.ctimeout().bit() {
-            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ctimeoutc().bit(true));
             return Err(Error::CMD_RSP_TIMEOUT);
         }
 
@@ -821,7 +819,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         }
 
         if star.ctimeout().bit() {
-            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ctimeoutc().bit(true));
             return Err(Error::CMD_RSP_TIMEOUT);
         }
         self.clear_static_flags();
@@ -856,12 +854,12 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         }
 
         if star.ctimeout().bit() {
-            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ctimeoutc().bit(true));
             return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         if star.ccrcfail().bit() {
-            self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ccrcfailc().bit(true));
             return Err(Error::CMD_CRC_FAIL);
         }
 
@@ -915,12 +913,12 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         }
 
         if star.ctimeout().bit() {
-            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ctimeoutc().bit(true));
             return Err(Error::CMD_RSP_TIMEOUT);
         }
 
         if star.ccrcfail().bit() {
-            self.peripheral.icr().write(|w| w.ccrcfailc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ccrcfailc().bit(true));
             return Err(Error::CMD_CRC_FAIL);
         }
 
@@ -972,10 +970,10 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         }
 
         if star.ctimeout().bit() {
-            self.peripheral.icr().write(|w| w.ctimeoutc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.ctimeoutc().bit(true));
         }
         if star.cmdrend().bit() {
-            self.peripheral.icr().write(|w| w.cmdrendc().bit(true));
+            self.peripheral.icr().modify(|_, w| w.cmdrendc().bit(true));
         }
         Ok(())
     }
@@ -1065,7 +1063,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
         self.peripheral
             .cmdr()
-            .write(|w| w.cmdstop().bit(true).cmdtrans().bit(false));
+            .modify(|_, w| w.cmdstop().bit(true).cmdtrans().bit(false));
 
         self.send_command(Command {
             argument: 0,
@@ -1077,7 +1075,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
 
         let res = self.get_cmd_resp1(command, CMD_TIMEOUT);
 
-        self.peripheral.cmdr().write(|w| w.cmdstop().bit(false));
+        self.peripheral.cmdr().modify(|_, w| w.cmdstop().bit(false));
         if res == Err(Error::ADDR_OUTOF_RANGE) {
             return Ok(());
         }
@@ -1288,7 +1286,7 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
         self.peripheral
             .dlenr()
             .write(|w| unsafe { w.bits(config.data_len) });
-        self.peripheral.dctrl().write(|w| unsafe {
+        self.peripheral.dctrl().modify(|_, w| unsafe {
             w.dblocksize()
                 .bits(config.data_block_size as u8 >> 4)
                 .dtdir()
@@ -1301,10 +1299,12 @@ impl<P: SdMmc> SdMmcMaster<P, Enabled> {
     }
 
     pub fn cmd_trans_enable(&mut self) {
-        self.peripheral.cmdr().write(|w| w.cmdtrans().bit(true));
+        self.peripheral.cmdr().modify(|_, w| w.cmdtrans().bit(true));
     }
     pub fn cmd_trans_disable(&mut self) {
-        self.peripheral.cmdr().write(|w| w.cmdtrans().bit(false));
+        self.peripheral
+            .cmdr()
+            .modify(|_, w| w.cmdtrans().bit(false));
     }
 }
 

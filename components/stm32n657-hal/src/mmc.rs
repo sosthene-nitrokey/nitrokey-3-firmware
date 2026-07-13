@@ -388,13 +388,17 @@ impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Enabled> {
         Ok(csd)
     }
 
-    fn read_ext_csd(&mut self, field_index: u16, _timeout: u32) -> Result<u32, Error> {
-        let mut ret = 0;
-        self.errorstate.clear();
+    fn enable_dctrl(&mut self) {
         self.sdmmc
             .peripheral
             .dctrl()
             .write(|w| unsafe { w.bits(0) });
+    }
+
+    fn read_ext_csd(&mut self, field_index: u16, _timeout: u32) -> Result<u32, Error> {
+        let mut ret = 0;
+        self.errorstate.clear();
+        self.enable_dctrl();
 
         self.sdmmc.config_data(sdmmc::ConfigData {
             data_time_out: 0xFFFFFFFF,
@@ -479,10 +483,7 @@ impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Enabled> {
         assert_eq!(self.state, State::Ready);
         self.errorstate.clear();
         self.state = State::Busy;
-        self.sdmmc
-            .peripheral
-            .dctrl()
-            .write(|w| unsafe { w.bits(0) });
+        self.enable_dctrl();
 
         let config = sdmmc::ConfigData {
             data_time_out: 0xFFFFFFFF,
@@ -578,10 +579,7 @@ impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Enabled> {
         }
 
         self.state = State::Busy;
-        self.sdmmc
-            .peripheral
-            .dctrl()
-            .write(|w| unsafe { w.bits(0) });
+        self.enable_dctrl();
 
         let address = if self.card_info.card_type == CardType::HighCapacity {
             raw_address * BLOCK_SIZE
@@ -686,10 +684,7 @@ impl<P: SdMmc, Pins: MmcPins<Peripheral = P>> MmcMaster<P, Pins, Enabled> {
         }
 
         self.state = State::Busy;
-        self.sdmmc
-            .peripheral
-            .dctrl()
-            .write(|w| unsafe { w.bits(0) });
+        self.enable_dctrl();
 
         let address = if self.card_info.card_type == CardType::HighCapacity {
             raw_address * BLOCK_SIZE
