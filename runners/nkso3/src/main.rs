@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+mod mmc;
 mod nucleo;
 
 use core::panic::PanicInfo;
@@ -20,7 +21,8 @@ mod app {
     use cortex_m_semihosting::hprintln;
     use stm32n657_hal::{
         bsec::Bsec,
-        gpio::{GpioC, GpioG},
+        gpio::{GpioA, GpioC, GpioE, GpioG},
+        mmc::MmcMaster,
         rcc::{ClockConfig, Rcc},
         timer::{MillisecondsCounter, Tim6, Tim7, Timer},
         Rate,
@@ -28,6 +30,7 @@ mod app {
     use systick_monotonic::Systick;
     use trussed::platform::consent;
 
+    use crate::mmc::Mmc;
     use crate::nucleo::{Button, Led};
 
     #[monotonic(binds = SysTick, default = true)]
@@ -42,6 +45,7 @@ mod app {
         button: Button,
         timer: Timer<Tim6>,
         counter: MillisecondsCounter<Tim7>,
+        // mmc: Mmc,
     }
 
     #[init]
@@ -63,6 +67,24 @@ mod app {
         let gpioc = GpioC::new(cx.device.GPIOC_S, &rcc);
         let button = Button::init(gpioc.c13);
 
+        let gpioa = GpioA::new(cx.device.GPIOA_S, &rcc);
+        let gpioe = GpioE::new(cx.device.GPIOE_S, &rcc);
+        hprintln!("Before pins").ok();
+        let pins = (
+            gpioa.a0.into_sdmmc2_cmd(),
+            gpioc.c2.into_sdmmc2_ck(),
+            gpioc.c4.into_sdmmc2_d0(),
+            // gpioc.c5.into_sdmmc2_d1(),
+            // gpioc.c0.into_sdmmc2_d2(),
+            // gpioe.e4.into_sdmmc2_d3(),
+        );
+        hprintln!("after pins").ok();
+        let mmc = MmcMaster::new(cx.device.SDMMC2_S, pins);
+
+        hprintln!("before enable").ok();
+        let mmc = mmc.enable(&rcc).expect("Enabling mmc");
+        hprintln!("after enable").ok();
+
         let tim7 = Tim7::new(cx.device.TIM7_S, &rcc);
         let counter = MillisecondsCounter::new(tim7, clock_config);
 
@@ -77,6 +99,7 @@ mod app {
                 led,
                 button,
                 timer,
+                // mmc,
             },
             init::Monotonics(monotonic),
         )
@@ -94,6 +117,7 @@ mod app {
         let start = counter.now();
         let mut cycle_start = start;
         loop {
+            hprintln!("idle").ok();
             let user_presence = button.check_user_presence();
             let is_user_present = user_presence != consent::Level::None;
 

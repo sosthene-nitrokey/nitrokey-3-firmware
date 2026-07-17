@@ -1,7 +1,7 @@
 use core::{marker::PhantomData, ops::Deref};
 
 use bitflags::bitflags;
-use stm32n6::stm32n657::{SDMMC1, SDMMC2, sdmmc1};
+use stm32n6::stm32n657::{SDMMC1_S, SDMMC2_S, sdmmc1};
 
 use crate::{
     rcc::{Peripheral, Rcc},
@@ -12,12 +12,12 @@ pub trait SdMmc: Deref<Target = sdmmc1::RegisterBlock> {
     fn enable_clk(&self, rcc: &Rcc);
 }
 
-impl SdMmc for SDMMC1 {
+impl SdMmc for SDMMC1_S {
     fn enable_clk(&self, rcc: &Rcc) {
         rcc.enable(Peripheral::Sdmmc1);
     }
 }
-impl SdMmc for SDMMC2 {
+impl SdMmc for SDMMC2_S {
     fn enable_clk(&self, rcc: &Rcc) {
         rcc.enable(Peripheral::Sdmmc2);
     }
@@ -491,7 +491,7 @@ enum_u!(
 
 const fn calc_timeout(timeout_seconds: u32) -> u32 {
     // TODO: get real system freq
-    let system_freq = 0;
+    let system_freq = 64_000_000;
 
     timeout_seconds * (system_freq / 8 / 1000)
     // return 10;
