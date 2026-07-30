@@ -1,13 +1,17 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
+use boards::init::DelogFlusher;
 use boards::ui::{
     buttons::UserPresence,
     rgb_led::{Intensities, RgbLed},
 };
+use delog::delog;
 use embedded_hal::digital::v2::{InputPin as _, OutputPin as _, PinState};
 use stm32n6::stm32n657::GPIOG_S;
 use stm32n657_hal::gpio::{Input, Output, PinC13, PinG0, PinG10, PinG8, PullDown, PushPull};
 use trussed::platform::consent;
+
+delog!(Delogger, 3 * 1024, 512, DelogFlusher);
 
 static PANIC_LED_INITIALIZED: AtomicBool = AtomicBool::new(false);
 

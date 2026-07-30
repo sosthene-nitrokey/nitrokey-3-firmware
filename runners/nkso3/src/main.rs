@@ -8,17 +8,20 @@ use core::panic::PanicInfo;
 
 use boards::ui::rgb_led::RgbLed as _;
 use cortex_m_rt::{exception, ExceptionFrame};
-use cortex_m_semihosting::hprintln;
 
 use self::nucleo::Led;
 
+delog::generate_macros!();
+
 #[rtic::app(device = stm32n6::stm32n657)]
 mod app {
-    use boards::ui::{
-        buttons::UserPresence as _,
-        rgb_led::{Intensities, RgbLed as _},
+    use boards::{
+        init::Delogger,
+        ui::{
+            buttons::UserPresence as _,
+            rgb_led::{Intensities, RgbLed as _},
+        },
     };
-    use cortex_m_semihosting::hprintln;
     use stm32n657_hal::{
         bsec::Bsec,
         gpio::{GpioA, GpioC, GpioE, GpioG},
@@ -53,7 +56,7 @@ mod app {
         let bsec = Bsec::new(cx.device.BSEC);
         let uid = bsec.uid();
 
-        hprintln!("nkso3 firmware is running on {:x?}", uid).ok();
+        info!("nkso3 firmware is running on {:x?}", uid);
 
         let rcc = Rcc::new(cx.device.RCC);
         let clock_config = rcc.clock_config();
@@ -69,7 +72,7 @@ mod app {
 
         let gpioa = GpioA::new(cx.device.GPIOA_S, &rcc);
         let gpioe = GpioE::new(cx.device.GPIOE_S, &rcc);
-        hprintln!("Before pins").ok();
+        info!("Before pins");
         let pins = (
             gpioa.a0.into_sdmmc2_cmd(),
             gpioc.c2.into_sdmmc2_ck(),
@@ -78,12 +81,12 @@ mod app {
             // gpioc.c0.into_sdmmc2_d2(),
             // gpioe.e4.into_sdmmc2_d3(),
         );
-        hprintln!("after pins").ok();
+        info!("after pins");
         let mmc = MmcMaster::new(cx.device.SDMMC2_S, pins);
 
-        hprintln!("before enable").ok();
+        info!("before enable");
         let mmc = mmc.enable(&rcc).expect("Enabling mmc");
-        hprintln!("after enable").ok();
+        info!("after enable");
 
         let tim7 = Tim7::new(cx.device.TIM7_S, &rcc);
         let counter = MillisecondsCounter::new(tim7, clock_config);
@@ -117,7 +120,7 @@ mod app {
         let start = counter.now();
         let mut cycle_start = start;
         loop {
-            hprintln!("idle").ok();
+            info!("idle");
             let user_presence = button.check_user_presence();
             let is_user_present = user_presence != consent::Level::None;
 
@@ -126,8 +129,12 @@ mod app {
             if elapsed >= 1_000 {
                 cycle_start = now;
 
-                let total_elapsed = now.checked_duration_since(start).unwrap();
-                hprintln!("{}", total_elapsed).ok();
+                let _total_elapsed = now.checked_duration_since(start).unwrap();
+                info!("{}", _total_elapsed);
+            }
+
+            if elapsed >= 100 {
+                Delogger::flush();
             }
 
             let mut intensities = Intensities::from(0);
@@ -148,7 +155,7 @@ mod app {
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     Led::set_panic_led();
-    hprintln!("{}", info).ok();
+    error_now!("{}", info);
     loop {
         cortex_m::asm::wfi();
     }
@@ -156,7 +163,7 @@ fn panic(info: &PanicInfo) -> ! {
 
 #[exception]
 unsafe fn HardFault(ef: &ExceptionFrame) -> ! {
-    hprintln!("HardFault: {:?}", ef).ok();
+    error_now!("HardFault: {:?}", ef);
     loop {
         cortex_m::asm::wfi();
     }
